@@ -8,17 +8,17 @@ What is deliberately not included is just as important as what is. There is no u
 
 ## Section 2: How To Run It
 
-1. **Install the toolchain.** Node.js 20+ and npm. PostgreSQL 14+ running locally. For storage you need an AWS S3 bucket (or any S3-compatible service; LocalStack works too). For the background worker to actually run locally you also need the Inngest CLI (`npm install -g inngest-cli`), because without the worker connected, jobs are created but nothing ever processes them.
+1. **Install the toolchain.** Node.js 20+ and npm. PostgreSQL 14+ running locally. For storage you need a Cloudflare R2 bucket (S3-compatible — the app speaks the S3 protocol; real AWS S3 also works). For the background worker to actually run locally you also need the Inngest CLI (`npm install -g inngest-cli`), because without the worker connected, jobs are created but nothing ever processes them.
 2. **Clone and install.** `git clone <repo> && cd Parsi && npm install`.
 3. **Create the environment file.** `Copy-Item .env.example .env` (Windows) / `cp .env.example .env` (macOS/Linux), then fill in every value. The file ships with commented placeholders only — never real keys.
 4. **The required environment variables, by name:**
    - `DATABASE_URL` — PostgreSQL connection string, e.g. `postgresql://postgres:postgres@localhost:5432/parsi_db?schema=public`. Comes from your local Postgres install.
    - `GEMINI_API_KEY` — free-tier key from Google AI Studio (`https://aistudio.google.com/apikey`); powers document parsing. Comes from your Google account.
    - `DEEPSEEK_API_KEY` — paid key from the DeepSeek platform (`https://platform.deepseek.com`), requires topping up credit; powers summarization. Comes from your DeepSeek account.
-   - `AWS_REGION` — region of your bucket, default `us-east-1`. From your AWS account.
-   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` — IAM user with S3 read/write on the bucket. From AWS IAM.
-   - `AWS_S3_BUCKET` — bucket name, default `parsi-receipts`. From AWS S3.
-   - `AWS_ENDPOINT` — **optional**; set it (plus the SDK's force-path-style, handled automatically) when using LocalStack or MinIO instead of real AWS.
+   - `AWS_ENDPOINT` — **required for Cloudflare R2**: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` (the SDK auto-enables force-path-style when this is set). Comes from your Cloudflare R2 overview page.
+   - `AWS_REGION` — `auto` for Cloudflare R2 (defaults to `auto` when `AWS_ENDPOINT` is set). For real AWS S3 use your bucket's region, e.g. `us-east-1`.
+   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` — for R2 these are the Access Key ID / Secret from a Cloudflare R2 API token with Object Read & Write; for AWS these are an IAM user's credentials with S3 read/write on the bucket.
+   - `AWS_S3_BUCKET` — bucket name, default `parsi-receipts`.
    - `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` — from the Inngest dashboard; blank is fine for local dev.
    - `NODE_ENV` — `development` locally.
 5. **Set up the database.** `npx prisma generate` then `npx prisma db push` (creates the schema directly without migrations; `npm run db:migrate` if you prefer a migration history). The default user is auto-created on first job submission by `ensureDefaultUser()` in `src/lib/user.ts`, so seeding is optional — but `npx tsx prisma/seed.ts` does it explicitly if you want it done up front.
