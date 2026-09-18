@@ -1,0 +1,59 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  files     File[]
+  jobs      Job[]
+
+  @@map("users")
+}
+
+model File {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  storageKey String   @unique @map("storage_key")
+  fileName   String   @map("file_name")
+  fileSize   Int      @map("file_size")
+  mimeType   String   @map("mime_type")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs       Job[]
+
+  @@index([userId])
+  @@map("files")
+}
+
+model Job {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  fileId       String    @map("file_id")
+  status       JobStatus @default(PENDING)
+  attempts     Int       @default(0)
+  errorMessage String?   @map("error_message")
+  resultJson   Json?     @map("result_json")
+  summaryText  String?   @map("summary_text")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  file         File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([fileId])
+  @@map("jobs")
+}
