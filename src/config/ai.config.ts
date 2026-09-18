@@ -1,19 +1,34 @@
 import { z } from "zod";
 
-export const AI_CONFIG = {
+// Gemini (free tier via Google AI Studio) - handles Task 1: document parsing.
+// Gemini 2.5 Flash has vision and is available on the free tier.
+export const GEMINI_CONFIG = {
   parsing: {
-    model: "gpt-4o-mini",
+    model: "gemini-2.5-flash",
     temperature: 0.2,
-    maxTokens: 1500,
+    maxOutputTokens: 1500,
     timeoutMs: 30000,
-    maxRetries: 2,
     detailLevel: "low" as const,
   },
+} as const;
+
+// DeepSeek (paid API, OpenAI-compatible) - handles Task 2: summarization.
+// DeepSeek's chat completions endpoint speaks the OpenAI wire protocol, so it
+// is called through the existing `openai` SDK pointed at DeepSeek's base URL.
+export const DEEPSEEK_CONFIG = {
+  baseUrl: "https://api.deepseek.com",
   summarization: {
-    model: "gpt-4o-mini",
+    model: "deepseek-chat",
     temperature: 0.3,
     maxTokens: 500,
     timeoutMs: 15000,
+  },
+} as const;
+
+// Shared operational settings across both providers.
+export const AI_CONFIG = {
+  parsing: {
+    maxRetries: 2,
   },
   documentProcessing: {
     // Minimum characters of extractable text before a PDF is treated as scanned.

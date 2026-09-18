@@ -1,6 +1,7 @@
 import { inngest } from "../client";
 import {
   AI_CONFIG,
+  GEMINI_CONFIG,
   DOCUMENT_PARSING_SYSTEM_PROMPT,
   ParsedDocumentSchema,
 } from "@/config/ai.config";
@@ -8,7 +9,8 @@ import { db } from "@/lib/db";
 import { verifyS3ObjectExists, getS3ObjectBuffer } from "@/lib/s3";
 import { extractDocument, ExtractionError } from "@/lib/extract";
 import { NonRetriableError } from "inngest";
-import OpenAI from "openai";
+import { GoogleGenAI } from "@google/genai";
+import type { Part } from "@google/genai";
 
 export interface ParseReceiptEventData {
   jobId: string;
@@ -67,8 +69,8 @@ export const parseReceiptFunction = inngest.createFunction(
         }
       });
 
-      // Step 4: Invoke OpenAI Chat Completions API
-      const rawAiOutput = await step.run("call-openai-vision", async () => {
+      // Step 4: Invoke Google Gemini (free tier) Chat + Vision API
+      const rawAiOutput = await step.run("call-gemini-vision", async () => {
         if (forceFailure) {
           // If forced failure test flag is on, return invalid JSON payload immediately
           return JSON.stringify({
@@ -77,60 +79,51 @@ export const parseReceiptFunction = inngest.createFunction(
           });
         }
 
-        const openai = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY,
-          timeout: AI_CONFIG.parsing.timeoutMs,
-        });
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
         const instruction = payload.text
           ? "Transcribe the following document in full and extract its structured expense data (when present) into the required JSON schema."
           : "Transcribe the attached document image(s) in full and extract their structured expense data (when present) into the required JSON schema.";
 
-        const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+        const parts: Part[] = [
           {
-            type: "text",
-            text: payload.text ? `${instruction}\n\n<document>\n${payload.text}\n</document>` : instruction,
+            text: payload.text
+              ? `${instruction}\n\n<document>\n${payload.text}\n</document>`
+              : instruction,
           },
         ];
 
         for (const image of payload.images) {
-          userContent.push({
-            type: "image_url",
-            image_url: {
-              url: `data:${image.mimeType};base64,${image.base64}`,
-              detail: AI_CONFIG.parsing.detailLevel,
+          parts.push({
+            inlineData: {
+              mimeType: image.mimeType,
+              data: image.base64,
             },
           });
         }
 
-        const completion = await openai.chat.completions.create({
-          model: AI_CONFIG.parsing.model,
-          temperature: AI_CONFIG.parsing.temperature,
-          max_tokens: AI_CONFIG.parsing.maxTokens,
-          messages: [
-            {
-              role: "system",
-              content: DOCUMENT_PARSING_SYSTEM_PROMPT,
-            },
-            {
-              role: "user",
-              content: userContent,
-            },
-          ],
+        const response = await ai.models.generateContent({
+          model: GEMINI_CONFIG.parsing.model,
+          contents: [{ role: "user", parts }],
+          config: {
+            systemInstruction: DOCUMENT_PARSING_SYSTEM_PROMPT,
+            temperature: GEMINI_CONFIG.parsing.temperature,
+            maxOutputTokens: GEMINI_CONFIG.parsing.maxOutputTokens,
+          },
         });
 
-        const choice = completion.choices?.[0];
-        if (!choice) {
-          throw new NonRetriableError("OpenAI returned an empty choice list");
+        const candidate = response.candidates?.[0];
+        if (!candidate) {
+          throw new NonRetriableError("Gemini returned an empty candidate list");
         }
 
-        if (choice.finish_reason !== "stop") {
+        if (candidate.finishReason && candidate.finishReason !== "STOP") {
           throw new NonRetriableError(
-            `OpenAI output was truncated. finish_reason was: ${choice.finish_reason}`
+            `Gemini output was truncated. finishReason was: ${candidate.finishReason}`
           );
         }
 
-        return choice.message.content || "";
+        return response.text || "";
       });
 
       // Step 5: Validate Zod schema & update PostgreSQL database

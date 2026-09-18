@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  AI_CONFIG,
+  DEEPSEEK_CONFIG,
   FOLLOWUP_SUMMARIZATION_SYSTEM_PROMPT,
 } from "@/config/ai.config";
 import OpenAI from "openai";
@@ -56,15 +56,18 @@ export async function POST(
       );
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: AI_CONFIG.summarization.timeoutMs,
+    // DeepSeek is OpenAI-compatible; the openai SDK is pointed at DeepSeek's
+    // base URL with a DeepSeek (paid) API key.
+    const deepseek = new OpenAI({
+      apiKey: process.env.DEEPSEEK_API_KEY,
+      baseURL: DEEPSEEK_CONFIG.baseUrl,
+      timeout: DEEPSEEK_CONFIG.summarization.timeoutMs,
     });
 
-    const completion = await openai.chat.completions.create({
-      model: AI_CONFIG.summarization.model,
-      temperature: AI_CONFIG.summarization.temperature,
-      max_tokens: AI_CONFIG.summarization.maxTokens,
+    const completion = await deepseek.chat.completions.create({
+      model: DEEPSEEK_CONFIG.summarization.model,
+      temperature: DEEPSEEK_CONFIG.summarization.temperature,
+      max_tokens: DEEPSEEK_CONFIG.summarization.maxTokens,
       messages: [
         {
           role: "system",
