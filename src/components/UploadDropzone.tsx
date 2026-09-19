@@ -2,7 +2,7 @@
 
 import { useState, useRef, DragEvent, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "@/lib/s3";
+import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "@/lib/r2";
 
 export default function UploadDropzone() {
   const router = useRouter();
@@ -46,9 +46,9 @@ export default function UploadDropzone() {
 
       const { uploadUrl, storageKey } = await presignedRes.json();
 
-      // Step 2: Direct Binary PUT to S3
+      // Step 2: Direct Binary PUT to Cloudflare R2
       setUploadStatus("Uploading document directly to storage...");
-      const s3Res = await fetch(uploadUrl, {
+      const r2Res = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
           "Content-Type": file.type,
@@ -56,8 +56,8 @@ export default function UploadDropzone() {
         body: file,
       });
 
-      if (!s3Res.ok) {
-        throw new Error(`S3 direct upload failed with status ${s3Res.status}`);
+      if (!r2Res.ok) {
+        throw new Error(`R2 direct upload failed with status ${r2Res.status}`);
       }
 
       // Step 3: POST /api/jobs with metadata
@@ -241,7 +241,7 @@ export default function UploadDropzone() {
       )}
 
       <div className="mt-6 flex items-center justify-between text-xs" style={{ color: "var(--color-on-surface-variant-color)" }}>
-        <span>Direct S3 Presigned Upload</span>
+        <span>Direct Cloudflare R2 Presigned Upload</span>
         <span>Strict Zod Validation</span>
         <span>Concurrently Throttled Worker</span>
       </div>

@@ -27,7 +27,7 @@ You are strictly prohibited from adding, swapping, or removing core technology d
 | **Database & ORM** | PostgreSQL with Prisma ORM |
 | **Background Queue** | Inngest (Event-driven background workers) |
 | **AI SDK** | Official OpenAI Node SDK (`openai`) targeting model `gpt-4o-mini` |
-| **File Storage** | AWS S3 or S3-compatible object storage via Presigned URLs |
+| **File Storage** | Cloudflare R2 (S3-compatible) object storage via Presigned URLs |
 | **Validation** | Zod (`z.infer`, `z.coerce`, strict runtime validation) |
 
 *Rule:* Do NOT install secondary ORMs (e.g., Drizzle, TypeORM), alternate AI SDKs (e.g., Vercel AI SDK, LangChain), alternate queue managers (e.g., BullMQ, Redis), or state machines[cite: 2].
@@ -38,9 +38,9 @@ You are strictly prohibited from adding, swapping, or removing core technology d
 
 Violation of any rule below constitutes an immediate task rejection:
 
-1. **NEVER Write Binary Data to PostgreSQL:** You MUST NOT store raw files, base64 strings, or file buffers in PostgreSQL[cite: 2]. Store AWS S3 `storage_key` strings only in the `files` table[cite: 2].
+1. **NEVER Write Binary Data to PostgreSQL:** You MUST NOT store raw files, base64 strings, or file buffers in PostgreSQL[cite: 2]. Store Cloudflare R2 `storage_key` strings only in the `files` table[cite: 2].
 2. **NEVER Inline Model Parameters:** Do NOT write inline model names, temperatures, max token limits, or retry limits inside Next.js API routes, Server Actions, or Inngest background functions[cite: 2]. ALL AI parameters MUST be imported directly from `src/config/ai.config.ts`[cite: 2].
-3. **NEVER Commit API Keys or Credentials:** Do NOT hardcode secrets, S3 keys, or OpenAI tokens[cite: 2]. Retrieve all credentials via standard `process.env` lookups[cite: 2].
+3. **NEVER Commit API Keys or Credentials:** Do NOT hardcode secrets, R2 keys, or AI tokens[cite: 2]. Retrieve all credentials via standard `process.env` lookups[cite: 2].
 4. **NEVER Violate the 3-Screen Boundary:** The application MUST contain strictly 3 UI views:
    - Screen 1: Upload View (`/`)[cite: 2]
    - Screen 2: Processing View (`/jobs/[id]` - PENDING/PROCESSING state)[cite: 2]
@@ -73,7 +73,7 @@ You must strictly conform to the following directory layout[cite: 2]. Do not inv
 │   │   │   │   └── route.ts           # Inngest API endpoint handler
 │   │   │   └── upload/
 │   │   │       └── presigned-url/
-│   │   │           └── route.ts       # POST: Validate payload & generate S3 PUT URL
+│   │   │           └── route.ts       # POST: Validate payload & generate R2 presigned PUT URL
 │   │   ├── jobs/
 │   │   │   └── [id]/
 │   │   │       └── page.tsx           # Dynamic View: Screen 2 (Processing) & Screen 3 (Result)
@@ -92,7 +92,7 @@ You must strictly conform to the following directory layout[cite: 2]. Do not inv
 │   │       └── parseReceipt.ts    # Background queue worker with concurrency = 3
 │   └── lib/
 │       ├── db.ts                  # Instantiated Prisma Client singleton
-│       ├── s3.ts                  # AWS S3 client and presigned URL helpers
+│       ├── r2.ts                   # Cloudflare R2 client and presigned URL helpers
 │       └── utils.ts               # Shared utility functions
 ├── .env.example
 ├── PRD.md                         # Single source of truth
@@ -150,8 +150,8 @@ export const parseReceiptFunction = inngest.createFunction(
     // Step 1: Mark Job as PROCESSING and increment attempts counter
     await step.run("mark-job-processing", async () => { ... });
 
-    // Step 2: Verify S3 object exists using HeadObjectCommand
-    await step.run("verify-s3-object", async () => { ... });
+    // Step 2: Verify R2 object exists using HeadObjectCommand
+    await step.run("verify-r2-object", async () => { ... });
 
     // Step 3: Fetch object or convert single-page PDF to PNG buffer
     const imagePayload = await step.run("prepare-document-payload", async () => { ... });

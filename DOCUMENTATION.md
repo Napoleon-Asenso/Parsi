@@ -8,17 +8,16 @@ What is deliberately not included is just as important as what is. There is no u
 
 ## Section 2: How To Run It
 
-1. **Install the toolchain.** Node.js 20+ and npm. PostgreSQL 14+ running locally. For storage you need a Cloudflare R2 bucket (S3-compatible — the app speaks the S3 protocol; real AWS S3 also works). For the background worker to actually run locally you also need the Inngest CLI (`npm install -g inngest-cli`), because without the worker connected, jobs are created but nothing ever processes them.
+1. **Install the toolchain.** Node.js 20+ and npm. PostgreSQL 14+ running locally. For storage you need a Cloudflare R2 bucket (R2 is S3-compatible, so the app speaks the S3 protocol to it — but the storage platform is Cloudflare, not AWS). For the background worker to actually run locally you also need the Inngest CLI (`npm install -g inngest-cli`), because without the worker connected, jobs are created but nothing ever processes them.
 2. **Clone and install.** `git clone <repo> && cd Parsi && npm install`.
 3. **Create the environment file.** `Copy-Item .env.example .env` (Windows) / `cp .env.example .env` (macOS/Linux), then fill in every value. The file ships with commented placeholders only — never real keys.
 4. **The required environment variables, by name:**
    - `DATABASE_URL` — PostgreSQL connection string, e.g. `postgresql://postgres:postgres@localhost:5432/parsi_db?schema=public`. Comes from your local Postgres install.
    - `GEMINI_API_KEY` — free-tier key from Google AI Studio (`https://aistudio.google.com/apikey`); powers document parsing. Comes from your Google account.
    - `DEEPSEEK_API_KEY` — paid key from the DeepSeek platform (`https://platform.deepseek.com`), requires topping up credit; powers summarization. Comes from your DeepSeek account.
-   - `AWS_ENDPOINT` — **required for Cloudflare R2**: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` (the SDK auto-enables force-path-style when this is set). Comes from your Cloudflare R2 overview page.
-   - `AWS_REGION` — `auto` for Cloudflare R2 (defaults to `auto` when `AWS_ENDPOINT` is set). For real AWS S3 use your bucket's region, e.g. `us-east-1`.
-   - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` — for R2 these are the Access Key ID / Secret from a Cloudflare R2 API token with Object Read & Write; for AWS these are an IAM user's credentials with S3 read/write on the bucket.
-   - `AWS_S3_BUCKET` — bucket name, default `parsi-receipts`.
+   - `R2_ACCOUNT_ID` — the 32-char hex account id from your Cloudflare R2 overview page. The client derives the endpoint from it (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`), and `forcePathStyle` is always on.
+   - `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` — the Access Key ID / Secret from a Cloudflare R2 API token with Object Read & Write.
+   - `R2_BUCKET_NAME` — bucket name, default `parsi-receipts`. Optional `R2_ENDPOINT` override if your endpoint differs.
    - `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY` — from the Inngest dashboard; blank is fine for local dev.
    - `NODE_ENV` — `development` locally.
 5. **Set up the database.** `npx prisma generate` then `npx prisma db push` (creates the schema directly without migrations; `npm run db:migrate` if you prefer a migration history). The default user is auto-created on first job submission by `ensureDefaultUser()` in `src/lib/user.ts`, so seeding is optional — but `npx tsx prisma/seed.ts` does it explicitly if you want it done up front.
@@ -29,17 +28,17 @@ Zip through steps 1–7 once and the dropzone is on screen. The only steps that 
 
 ## Section 3: The Flow, Step By Step
 
-**1. The user picks a file.** The user drags a file onto the dropzone (or clicks to browse) on `/` — `src/components/UploadDropzone.tsx`. The client immediately checks the size against the 10 MB cap imported from `src/lib/s3.ts`; anything larger is rejected right there with a visible error and nothing is sent. Only the first file in a drop is ever read — single-file processing by policy.
+**1. The user picks a file.** The user drags a file onto the dropzone (or clicks to browse) on `/` — `src/components/UploadDropzone.tsx`. The client immediately checks the size against the 10 MB cap imported from `src/lib/r2.ts`; anything larger is rejected right there with a visible error and nothing is sent. Only the first file in a drop is ever read — single-file processing by policy.
 
-**2. The client asks for an upload signature.** `UploadDropzone` POSTs `{ fileName, fileType, fileSize }` to `POST /api/upload/presigned-url` (`src/app/api/upload/presigned-url/route.ts`). That route validates the payload shape with a Zod schema, enforces the size ceiling, and calls `generatePresignedUploadUrl()` in `src/lib/s3.ts`, which builds an S3 `PutObjectCommand` and returns a 15-minute PUT-signed URL plus a storage key like `uploads/<userId>/<uuid>-<fileName>`. The route replies `{ uploadUrl, storageKey }`.
+**2. The client asks for an upload signature.** `UploadDropzone` POSTs `{ fileName, fileType, fileSize }` to `POST /api/upload/presigned-url` (`src/app/api/upload/presigned-url/route.ts`). That route validates the payload shape with a Zod schema, enforces the size ceiling, and calls `generatePresignedUploadUrl()` in `src/lib/r2.ts`, which builds an R2 `PutObjectCommand` (S3 protocol, Cloudflare platform) and returns a 15-minute PUT-signed URL plus a storage key like `uploads/<userId>/<uuid>-<fileName>`. The route replies `{ uploadUrl, storageKey }`.
 
-**3. The browser uploads the file directly to S3.** The client PUTs the raw `File` body straight to `uploadUrl` (`fetch(uploadUrl, { method: "PUT", body: file })`) — it never touches this Next.js app as a byte stream, so the app server's memory and bandwidth are bypassed entirely.
+**3. The browser uploads the file directly to Cloudflare R2.** The client PUTs the raw `File` body straight to `uploadUrl` (`fetch(uploadUrl, { method: "PUT", body: file })`) — it never touches this Next.js app as a byte stream, so the app server's memory and bandwidth are bypassed entirely.
 
 **4. The client registers a job.** The client POSTs `{ storageKey, fileName, fileSize, mimeType }` to `POST /api/jobs` (`src/app/api/jobs/route.ts`). This route ensures the default user exists, creates a `File` row (metadata only — the storage key string, never a binary), creates a `Job` row in `PENDING` with `attempts: 0`, and finally pushes an Inngest event `expense/job.created` carrying the job id, storage key, and mime type. It answers `202 Accepted` with `{ jobId, status: "PENDING" }`. The client then `router.push()`es to `/jobs/<jobId>`.
 
 **5. The user watches processing happen.** `/jobs/<id>` renders `src/components/ProcessingView.tsx`, which polls `GET /api/jobs/<id>` (`src/app/api/jobs/[id]/route.ts`) every 2 seconds with `cache: "no-store"`. Each response is the full job row including status, attempts, error message, and the linked file metadata. The view shows the state badge and a progress bar that counts up toward a hard 60-second client-side timeout; if the job is neither `DONE` nor `FAILED` by then, polling stops and a "Retry Upload" screen appears.
 
-**6. A worker picks the job up in the background.** The Inngest function in `src/inngest/functions/parseReceipt.ts` is triggered by the event and runs in five isolated `step.run` blocks: (1) mark the job `PROCESSING` and increment `attempts`; (2) verify the S3 object exists via `HeadObjectCommand` — missing objects throw immediately, no AI call wasted; (3) download the object and normalize it in `src/lib/extract.ts` (images pass through as-is, PDFs get their text layer pulled out or are rasterized to PNGs when scanned, and common office/text formats become plain text); (4) call Google Gemini 2.5 Flash through the `@google/genai` SDK with the image(s) and/or extracted text and the system prompt, applying every model parameter from `src/config/ai.config.ts`; (5) strip any Markdown fences the model wrapped around its answer, `JSON.parse` it, run it through `ParsedDocumentSchema.safeParse()`, and only then write `resultJson` and flip the status to `DONE`. Any parse or validation failure sets the status to `FAILED` with a formatted diagnostic message in `errorMessage` instead.
+**6. A worker picks the job up in the background.** The Inngest function in `src/inngest/functions/parseReceipt.ts` is triggered by the event and runs in five isolated `step.run` blocks: (1) mark the job `PROCESSING` and increment `attempts`; (2) verify the R2 object exists via `HeadObjectCommand` — missing objects throw immediately, no AI call wasted; (3) download the object and normalize it in `src/lib/extract.ts` (images pass through as-is, PDFs get their text layer pulled out or are rasterized to PNGs when scanned, and common office/text formats become plain text); (4) call Google Gemini 2.5 Flash through the `@google/genai` SDK with the image(s) and/or extracted text and the system prompt, applying every model parameter from `src/config/ai.config.ts`; (5) strip any Markdown fences the model wrapped around its answer, `JSON.parse` it, run it through `ParsedDocumentSchema.safeParse()`, and only then write `resultJson` and flip the status to `DONE`. Any parse or validation failure sets the status to `FAILED` with a formatted diagnostic message in `errorMessage` instead.
 
 **7. The user lands on the result.** On the next poll that returns `DONE`, `ProcessingView` hands the job to `src/components/ResultView.tsx`. It renders the document type, merchant, date, total, currency, tax, category, the full transcription, and the line-items table, plus a "Summarize Expense" button.
 
@@ -101,11 +100,11 @@ model Job {
 }
 ```
 
-**`users`** holds exactly one thing: a user identity. **`files`** holds *metadata about an uploaded object*, never the object itself — the bytes live in S3 and the table stores only the storage key. **`jobs`** holds the lifecycle of one processing attempt: its state, how many times it ran, what came out of the AI, and any error. The rationale for each decision:
+**`users`** holds exactly one thing: a user identity. **`files`** holds *metadata about an uploaded object*, never the object itself — the bytes live in Cloudflare R2 and the table stores only the storage key. **`jobs`** holds the lifecycle of one processing attempt: its state, how many times it ran, what came out of the AI, and any error. The rationale for each decision:
 
 - **All ids are `String` UUIDs (`@default(uuid())`)** rather than auto-incrementing integers. UUIDs are generated application-side so ids exist before any insert, and they cannot be enumerated by an external caller, which matters because job ids are exposed in URLs and polled over HTTP.
 - **`users.email` is `@unique`.** A user is identified by email; two rows with the same email would make "which user owns this file" unanswerable.
-- **`files.storageKey` is `@unique`.** An S3 object key must appear at most once in the system. Without this, the same physical object could be registered twice and parsed twice, spending two AI calls on one file — and the key is the only link between the database and the object, so the link must be unambiguous.
+- **`files.storageKey` is `@unique`.** An R2 object key must appear at most once in the system. Without this, the same physical object could be registered twice and parsed twice, spending two AI calls on one file — and the key is the only link between the database and the object, so the link must be unambiguous.
 - **`files.userId` is required and cascades on delete.** A file with no owner is an orphan; when a user is deleted the cascade removes their files and (via `jobs.fileId`) their jobs in one operation rather than leaking rows.
 - **`files.fileSize` is `Int` and `fileSize`/`mimeType` are non-nullable.** They are always known at registration time, and the size ceiling check is a hard product rule, so there is no valid "unknown size" state.
 - **`files.mimeType` is `String`, not an enum.** Unbounded on purpose: the extraction layer in `src/lib/extract.ts` inspects both the declared type *and* the file content and extension, so a rigid enum here would fight the format-agnostic pipeline.
@@ -116,7 +115,7 @@ model Job {
 
 **Which constraints in this schema make an invalid state impossible?**
 
-- The **`@unique` on `files.storageKey`** makes it impossible to register the same S3 object twice, which in turn makes it impossible to double-spend AI calls on one document — the last line of defence if application code ever loses a dedup check.
+- The **`@unique` on `files.storageKey`** makes it impossible to register the same R2 object twice, which in turn makes it impossible to double-spend AI calls on one document — the last line of defence if application code ever loses a dedup check.
 - The **`JobStatus` enum** makes it impossible to write a row whose status is anything other than the four valid states; a typo like `"PENDNG"` fails at the database instead of confusing every status check that reads the row.
 - The **foreign key `Job.fileId → files.id` (with cascade)** makes it impossible to create a job for a file that does not exist — the app always creates the `File` first, but even if it forgot, the constraint would reject the insert.
 - The **foreign keys `File.userId` and `Job.userId` → users.id (with cascade)** make it impossible to attribute a file or job to a nonexistent user, and make it impossible to leave orphaned child rows behind after a user is deleted.
@@ -128,11 +127,11 @@ One honest caveat: the database does **not** express "a `DONE` job must have a `
 
 ### 5.1 Presigned URLs and Direct-to-Object-Storage Uploads
 
-**What it is.** A presigned URL is a short-lived signature from the storage provider that grants a specific client permission to perform one specific operation — here, a `PUT` of one object to one bucket key — without that client ever holding the bucket's credentials. The browser uploads the file straight to S3 using that URL, and the application server never sees a file byte.
+**What it is.** A presigned URL is a short-lived signature from the storage provider that grants a specific client permission to perform one specific operation — here, a `PUT` of one object to one bucket key — without that client ever holding the bucket's credentials. The browser uploads the file straight to Cloudflare R2 using that URL, and the application server never sees a file byte.
 
-**Why it is needed.** If the upload flowed through the Next.js server, every file would be buffered in process memory and streamed out over the server's bandwidth, serialising all uploads behind one bottleneck and letting a sustained upload flood exhaust the server. S3 is built to accept parallel bursts of data; the application server is not. Direct upload converts the CE network from a traffic funnel into a non-participant, which is the PRD's explicit goal of bypassing application-server bandwidth limits.
+**Why it is needed.** If the upload flowed through the Next.js server, every file would be buffered in process memory and streamed out over the server's bandwidth, serialising all uploads behind one bottleneck and letting a sustained upload flood exhaust the server. R2 is built to accept parallel bursts of data; the application server is not. Direct upload converts the CE network from a traffic funnel into a non-participant, which is the PRD's explicit goal of bypassing application-server bandwidth limits.
 
-**How I implemented it.** `POST /api/upload/presigned-url` (`src/app/api/upload/presigned-url/route.ts`) validates the request and calls `generatePresignedUploadUrl()` in `src/lib/s3.ts`:
+**How I implemented it.** `POST /api/upload/presigned-url` (`src/app/api/upload/presigned-url/route.ts`) validates the request and calls `generatePresignedUploadUrl()` in `src/lib/r2.ts`:
 
 ```ts
 const command = new PutObjectCommand({
@@ -140,18 +139,18 @@ const command = new PutObjectCommand({
   Key: storageKey,
   ContentType: fileType,
 });
-const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+const uploadUrl = await getSignedUrl(r2Client(), command, { expiresIn: 900 });
 ```
 
 The signature lasts exactly 900 seconds (15 minutes), the key is namespaced `uploads/{userId}/{uuid}-{fileName}`, and the client in `src/components/UploadDropzone.tsx` PUTs the `File` object directly to that URL before ever calling `/api/jobs`.
 
-**What I chose against, and why.** Uploading through my own API route (`POST /api/upload` that buffers the file and forwards it to S3) is the standard fallback, and I rejected it because it re-introduces exactly the server memory and bandwidth bottleneck the brief exists to remove. I also chose not to store the file in Postgres at all — no `Bytes` column, no base64 strings — because the brief's "no binary in the database" rule is the reason this whole architecture exists. The forced part of the choice is the 15-minute expiry and the S3 SDK being server-only: there is no realistic alternative for a signed URL, and the SDK must live behind a route so its credentials never reach the browser bundle.
+**What I chose against, and why.** Uploading through my own API route (`POST /api/upload` that buffers the file and forwards it to R2) is the standard fallback, and I rejected it because it re-introduces exactly the server memory and bandwidth bottleneck the brief exists to remove. I also chose not to store the file in Postgres at all — no `Bytes` column, no base64 strings — because the brief's "no binary in the database" rule is the reason this whole architecture exists. The forced part of the choice is the 15-minute expiry and the S3-protocol SDK being server-only (Cloudflare R2 has no native presigning SDK; it exposes the S3 API exactly for this): there is no realistic alternative for a signed URL, and the SDK must live behind a route so its credentials never reach the browser bundle.
 
 ### 5.2 Event-Driven Background Queue (Inngest)
 
 **What it is.** A background queue decouples "the client accepted this work" from "the work is now executing." Inngest is an event-driven queue: the API publishes an event (`expense/job.created`), and one or more registered functions subscribe to that event type and are executed asynchronously by a worker. The client gets its HTTP response immediately instead of waiting for the heavy work.
 
-**Why it is needed.** The parsing call takes seconds and depends on two slow, failure-prone external services (S3 reads and the Gemini API). If a request handler did that synchronously, the user would stare at the dropzone for ten seconds, the Next.js route would block a server resource the whole time, and a single Gemini outage would fail the original upload HTTP call the user already believed succeeded. Decoupling means the upload is *accepted* in milliseconds, the expensive work happens later where it can be retried independently, and the UI represents progress instead of a frozen spinner.
+**Why it is needed.** The parsing call takes seconds and depends on two slow, failure-prone external services (R2 reads and the Gemini API). If a request handler did that synchronously, the user would stare at the dropzone for ten seconds, the Next.js route would block a server resource the whole time, and a single Gemini outage would fail the original upload HTTP call the user already believed succeeded. Decoupling means the upload is *accepted* in milliseconds, the expensive work happens later where it can be retried independently, and the UI represents progress instead of a frozen spinner.
 
 **How I implemented it.** `POST /api/jobs` creates the rows in Postgres, then publishes the event via the shared client in `src/inngest/client.ts`: `inngest.send({ name: "expense/job.created", data: { jobId, storageKey, mimeType, ... } })` and replies `202 Accepted`. The handler is served at `src/app/api/inngest/route.ts` with `serve({ client: inngest, functions: [parseReceiptFunction] })`. Each of the worker's five phases is wrapped in its own `step.run(...)` block so every step is an atomic retry boundary with its own idempotency — a crash mid-pipeline re-runs only the incomplete step, not the whole function.
 
@@ -195,7 +194,7 @@ Because it is a worker-level limit rather than nginx-style HTTP throttling, exce
 
 **What it is.** A generate-content call whose message content is not just text but can include images (`inlineData` content parts — base64-encoded bytes), letting the model both read text and *look* at what is in the picture — the difference between OCR-style text recognition and actually understanding that the circled number is a total.
 
-**Why it is needed.** Photographed and scanned documents are images before they are text, and setting that (S3 object) in front of Gemini 2.5 Flash's vision capability is what makes structured extraction work at all: the model can read the vendor name, the font-styled table headers, the hand-edit marks, and the totals in one pass. Without vision input, a scanned receipt would need a separate OCR library (an extra dependency, extra cost, and error-prone pipeline), and anything a blurry photo of a coffee-shop bill turned into would be guesswork. Text-only would also silently fail on documents whose extracted text is garbage. Gemini is the *only* provider here that could do vision — DeepSeek's API has no image model at all, which is exactly why parsing lives with Gemini free and summarization (text-only) lives with DeepSeek.
+**Why it is needed.** Photographed and scanned documents are images before they are text, and setting that (R2 object) in front of Gemini 2.5 Flash's vision capability is what makes structured extraction work at all: the model can read the vendor name, the font-styled table headers, the hand-edit marks, and the totals in one pass. Without vision input, a scanned receipt would need a separate OCR library (an extra dependency, extra cost, and error-prone pipeline), and anything a blurry photo of a coffee-shop bill turned into would be guesswork. Text-only would also silently fail on documents whose extracted text is garbage. Gemini is the *only* provider here that could do vision — DeepSeek's API has no image model at all, which is exactly why parsing lives with Gemini free and summarization (text-only) lives with DeepSeek.
 
 **How I implemented it.** In the worker's `call-gemini-vision` step, the extracted payload either carries text, base64 images, or both, and the images are pushed as `Part` objects with `inlineData`:
 
@@ -303,7 +302,7 @@ My `JSON.parse` was handed the backticks and the word "json".
 
 **Symptom.** A scanned PDF (pages that are pure images) processed "successfully" but returned a transcription of zero length and a `documentType` of "Unknown Document" — the model had nothing to read.
 
-**Investigation.** I checked whether the PDF handling branch was even running (it was), then printed the output of the pdfjs text extraction and found it was essentially empty. I initially convinced myself the PDF was malformed, and wasted a pass testing against a re-exported PDF, before the obvious truth surfaced: *there is no text to extract*. I also checked the S3 download size, which was correct — another red herring.
+**Investigation.** I checked whether the PDF handling branch was even running (it was), then printed the output of the pdfjs text extraction and found it was essentially empty. I initially convinced myself the PDF was malformed, and wasted a pass testing against a re-exported PDF, before the obvious truth surfaced: *there is no text to extract*. I also checked the R2 download size, which was correct — another red herring.
 
 **Cause.** A scanned PDF stores pictures of pages, not a text layer. The project's rulebook calls for rasterising single-page PDFs, but I had built text extraction only, and the vision-model path that could actually read the scan was never triggered.
 
@@ -351,7 +350,7 @@ My `JSON.parse` was handed the backticks and the word "json".
 
 **The MIME whitelist is not enforced as written.** `POST /api/upload/presigned-url` validates the payload *shape* and the *size ceiling* but accepts any `fileType` string and hands out the signature anyway. The extraction layer then sniffs content (bytes, extension) and either processes or rejects independently, so nothing harmful reaches the model — but the PRD's explicit `image/jpeg` / `image/png` / `application/pdf` whitelist is not literally enforced at the signing route, and I have flagged this as a known gap against the guardrails.
 
-**A signed URL does not bound the uploaded bytes.** The presigned PUT URL is generated for a 10 MB cap documented in the app, but the signature itself carries no `ContentLength`, so a malicious client could PUT a 2 GB object directly to S3 and bypass the server-side size check. The check is authoritative from the *application's* perspective only. Tightening this means signing with a `ContentLength` condition; I did not, because it adds S3 policy complexity and the app already rejects oversized files at both the dropzone and the signing route.
+**A signed URL does not bound the uploaded bytes.** The presigned PUT URL is generated for a 10 MB cap documented in the app, but the signature itself carries no `ContentLength`, so a malicious client could PUT a 2 GB object directly to R2 and bypass the server-side size check. The check is authoritative from the *application's* perspective only. Tightening this means signing with a `ContentLength` condition; I did not, because it adds S3 policy complexity and the app already rejects oversized files at both the dropzone and the signing route.
 
 **Left out because the brief forbids it (not because it is hard):** multi-file/bulk upload, CSV/PDF export, document sharing, authentication screens, and currency conversion. **Left out because I ran out of time:** none of the core promises are missing, but the things above (server-side MIME whitelist strictness, signed-content-length, summarize concurrency) are the list I would have finished if the sprint had been longer.
 

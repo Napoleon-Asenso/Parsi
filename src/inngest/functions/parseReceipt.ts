@@ -6,7 +6,7 @@ import {
   ParsedDocumentSchema,
 } from "@/config/ai.config";
 import { db } from "@/lib/db";
-import { verifyS3ObjectExists, getS3ObjectBuffer } from "@/lib/s3";
+import { verifyObjectExists, getObjectBuffer } from "@/lib/r2";
 import { extractDocument, ExtractionError } from "@/lib/extract";
 import { NonRetriableError } from "inngest";
 import { GoogleGenAI } from "@google/genai";
@@ -45,18 +45,18 @@ export const parseReceiptFunction = inngest.createFunction(
         return updatedJob.file.fileName;
       });
 
-      // Step 2: Verify S3 object exists using HeadObjectCommand
-      await step.run("verify-s3-object", async () => {
-        const exists = await verifyS3ObjectExists(storageKey);
+      // Step 2: Verify R2 object exists using HeadObjectCommand
+      await step.run("verify-r2-object", async () => {
+        const exists = await verifyObjectExists(storageKey);
         if (!exists) {
-          throw new NonRetriableError(`S3 object not found for storageKey: ${storageKey}`);
+          throw new NonRetriableError(`R2 object not found for storageKey: ${storageKey}`);
         }
       });
 
       // Step 3: Extract readable content from ANY accepted file format.
       // Images stay as images; PDFs/text/markdown/Word are turned into text.
       const payload = await step.run("prepare-document-payload", async () => {
-        const fileBuffer = await getS3ObjectBuffer(storageKey);
+        const fileBuffer = await getObjectBuffer(storageKey);
         const documentName = fileName || storedFileName;
 
         try {

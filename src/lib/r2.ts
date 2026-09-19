@@ -2,18 +2,29 @@ import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from 
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
 
-export const BUCKET_NAME = process.env.AWS_S3_BUCKET || "parsi-receipts";
-export const AWS_REGION =
-  process.env.AWS_REGION || (process.env.AWS_ENDPOINT ? "auto" : "us-east-1");
+export const BUCKET_NAME = process.env.R2_BUCKET_NAME || "parsi-receipts";
 
-export const s3Client = new S3Client({
-  region: AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "mock-access-key",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "mock-secret-key",
-  },
-  ...(process.env.AWS_ENDPOINT ? { endpoint: process.env.AWS_ENDPOINT, forcePathStyle: true } : {}),
-});
+function getR2Endpoint(): string {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  if (!accountId) {
+    throw new Error(
+      "R2_ACCOUNT_ID is required. Find it on your Cloudflare R2 overview page."
+    );
+  }
+  return process.env.R2_ENDPOINT || `https://${accountId}.r2.cloudflarestorage.com`;
+}
+
+function r2Client(): S3Client {
+  return new S3Client({
+    region: "auto",
+    endpoint: getR2Endpoint(),
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID || "mock-access-key",
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "mock-secret-key",
+    },
+  });
+}
 
 // Any file type is accepted; the only hard limit is the size ceiling below.
 export const MAX_FILE_SIZE_LABEL = "10 MB";
@@ -35,32 +46,32 @@ export async function generatePresignedUploadUrl(
     ContentType: fileType,
   });
 
-  const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 });
+  const uploadUrl = await getSignedUrl(r2Client(), command, { expiresIn: 900 });
 
   return { uploadUrl, storageKey };
 }
 
-export async function verifyS3ObjectExists(storageKey: string): Promise<boolean> {
+export async function verifyObjectExists(storageKey: string): Promise<boolean> {
   try {
     const command = new HeadObjectCommand({
       Bucket: BUCKET_NAME,
       Key: storageKey,
     });
-    await s3Client.send(command);
+    await r2Client().send(command);
     return true;
   } catch (error) {
     return false;
   }
 }
 
-export async function getS3ObjectBuffer(storageKey: string): Promise<Buffer> {
+export async function getObjectBuffer(storageKey: string): Promise<Buffer> {
   const command = new GetObjectCommand({
     Bucket: BUCKET_NAME,
     Key: storageKey,
   });
-  const response = await s3Client.send(command);
+  const response = await r2Client().send(command);
   if (!response.Body) {
-    throw new Error(`Empty body returned for S3 object: ${storageKey}`);
+    throw new Error(`Empty body returned for R2 object: ${storageKey}`);
   }
   const byteArray = await response.Body.transformToByteArray();
   return Buffer.from(byteArray);

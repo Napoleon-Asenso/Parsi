@@ -5,6 +5,11 @@ node_modules
 .env.local
 .env.*.local
 
+# Dev-only object store (Option A): zero-setup local filesystem for uploads.
+# Holds uploaded binaries on DISK during development so they never touch the DB.
+.local-storage/
+.local-dev-storage/
+
 tsconfig.tsbuildinfo
 *.tsbuildinfo
 
