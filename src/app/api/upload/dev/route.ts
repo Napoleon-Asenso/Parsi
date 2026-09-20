@@ -35,7 +35,7 @@ export async function PUT(req: NextRequest) {
   if (contentLength > MAX_FILE_SIZE_BYTES) {
     return NextResponse.json(
       {
-        error: `File exceeds the ${MAX_FILE_SIZE_LABEL} limit`,
+        error: `File exceeds the ${MAX_FILE_SIZE_BYTES} limit`,
         code: "FILE_TOO_LARGE",
       },
       { status: 413 }
@@ -46,7 +46,7 @@ export async function PUT(req: NextRequest) {
   if (bytes.byteLength > MAX_FILE_SIZE_BYTES) {
     return NextResponse.json(
       {
-        error: `File exceeds the ${MAX_FILE_SIZE_LABEL} limit`,
+        error: `File exceeds the ${MAX_FILE_SIZE_BYTES} limit`,
         code: "FILE_TOO_LARGE",
       },
       { status: 413 }

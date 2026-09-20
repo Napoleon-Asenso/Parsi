@@ -43,6 +43,8 @@
     "sharp@0.33.5": true,
     "@prisma/client@6.2.1": true,
     "@prisma/engines@6.2.1": true,
-    "canvas@3.2.3": true
+    "canvas@3.2.3": true,
+    "@google/genai@2.23.0": true,
+    "protobufjs@7.6.6": true
   }
 }
