@@ -71,7 +71,15 @@ export async function getLocalObjectBuffer(storageKey: string): Promise<Buffer> 
   return fs.readFile(toLocalPath(storageKey));
 }
 
-export async function writeLocalObject(storageKey: string, data: Uint8Array): Promise<void> {
+/**
+ * Dev-only primitive: write binary bytes for a storage key to the LOCAL
+ * filesystem. Guaranteed by `useLocalDevStorage()` to only ever run in
+ * development; binary NEVER touches PostgreSQLalert in this path either.
+ */
+export async function writeLocalObject(
+  storageKey: string,
+  data: Uint8Array
+): Promise<void> {
   const localPath = toLocalPath(storageKey);
   await fs.mkdir(path.dirname(localPath), { recursive: true });
   await fs.writeFile(localPath, data);

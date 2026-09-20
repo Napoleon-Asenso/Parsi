@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { MAX_FILE_SIZE_BYTES, generatePresignedUploadUrl } from "@/lib/r2";
+import { MAX_FILE_SIZE_BYTES, generatePresignedUploadUrl } from "@/lib/storage";
 import { DEFAULT_USER_ID } from "@/lib/user";
 
 const UploadRequestSchema = z.object({

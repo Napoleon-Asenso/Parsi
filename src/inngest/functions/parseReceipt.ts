@@ -6,7 +6,7 @@ import {
   ParsedDocumentSchema,
 } from "@/config/ai.config";
 import { db } from "@/lib/db";
-import { verifyObjectExists, getObjectBuffer } from "@/lib/r2";
+import { verifyObjectExists, getObjectBuffer } from "@/lib/storage";
 import { extractDocument, ExtractionError } from "@/lib/extract";
 import { NonRetriableError } from "inngest";
 import { GoogleGenAI } from "@google/genai";
