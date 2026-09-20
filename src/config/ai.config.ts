@@ -1,8 +1,28 @@
 import { z } from "zod";
 
+// Single source of truth for BOTH AI provider endpoints. Consumers and the
+// *_CONFIG blocks below MUST derive base URLs/endpoints from here - endpoints
+// are never inlined in routes, workers, or Server Actions (AGENTS rule: no
+// inline provider parameters).
+export const AI_ENDPOINTS = {
+  // Gemini: Google's native REST endpoint (default base the @google/genai SDK
+  // uses). Parsing (Task 1) reaches this endpoint through GoogleGenAI.
+  gemini: {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    operationEndpoint: "/generateContent",
+  },
+  // DeepSeek: OpenAI-compatible chat completions endpoint. Summarization
+  // (Task 2) reaches it through the `openai` SDK pointed at this base URL.
+  deepseek: {
+    baseUrl: "https://api.deepseek.com",
+    operationEndpoint: "/chat/completions",
+  },
+} as const;
+
 // Gemini (free tier via Google AI Studio) - handles Task 1: document parsing.
 // Gemini 2.5 Flash has vision and is available on the free tier.
 export const GEMINI_CONFIG = {
+  endpoint: AI_ENDPOINTS.gemini,
   parsing: {
     model: "gemini-2.5-flash",
     temperature: 0.2,
@@ -16,7 +36,7 @@ export const GEMINI_CONFIG = {
 // DeepSeek's chat completions endpoint speaks the OpenAI wire protocol, so it
 // is called through the existing `openai` SDK pointed at DeepSeek's base URL.
 export const DEEPSEEK_CONFIG = {
-  baseUrl: "https://api.deepseek.com",
+  baseUrl: AI_ENDPOINTS.deepseek.baseUrl,
   summarization: {
     model: "deepseek-chat",
     temperature: 0.3,
