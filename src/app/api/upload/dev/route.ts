@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/storage";
-import { useLocalDevStorage, writeLocalObject } from "@/lib/local-storage";
+import { useLocalDevStorage, writeLocalObject } from "@/lib/localStorage";
 
 /**
  * Dev-only PUT ingest for the zero-setup local object store.

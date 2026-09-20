@@ -160,7 +160,7 @@ export default function ResultView({ job }: ResultViewProps) {
                 </tr>
               </thead>
               <tbody>
-                {lineItems.map((item, index) => (
+                {lineItems.map((item: any, index: number) => (
                   <tr
                     key={`${item.description}-${index}`}
                     style={{ borderBottom: "1px solid var(--color-outline-variant-color)" }}
