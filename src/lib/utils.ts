@@ -1,5 +1,26 @@
 import type { ParsedDocument } from "@/config/ai.config";
 
+/**
+ * The only upload MIME types this slice accepts. Enforced server-side by
+ * /api/upload/presigned-url and mirrored by the dropzone's `accept` attribute.
+ */
+export const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"] as const;
+
+export type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
+
+/**
+ * Maps a client-supplied MIME string onto the canonical allowlist, or returns
+ * null when the type is not accepted. `image/jpg` is the one common non-standard
+ * spelling browsers emit for JPEG, so it is folded into `image/jpeg`.
+ */
+export function normalizeMimeType(fileType: string | null | undefined): AllowedMimeType | null {
+  const normalized = (fileType ?? "").trim().toLowerCase().split(";")[0].trim();
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "image/jpeg";
+  if (normalized === "image/png") return "image/png";
+  if (normalized === "application/pdf") return "application/pdf";
+  return null;
+}
+
 export type JobStatusValue = "PENDING" | "PROCESSING" | "DONE" | "FAILED";
 
 export interface JobFileRecord {

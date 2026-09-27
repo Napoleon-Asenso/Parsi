@@ -3,6 +3,7 @@
 import { useState, useRef, DragEvent, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "@/lib/storage";
+import { ALLOWED_MIME_TYPES, normalizeMimeType } from "@/lib/utils";
 
 export default function UploadDropzone() {
   const router = useRouter();
@@ -16,7 +17,16 @@ export default function UploadDropzone() {
   const handleFile = async (file: File) => {
     setErrorMessage(null);
 
-    // 1. Client-side Size validation (10 MB cap)
+    // 1. Client-side type validation (mirrors the server-side allowlist)
+    const mimeType = normalizeMimeType(file.type);
+    if (!mimeType) {
+      setErrorMessage(
+        `"${file.name}" is not a supported file type. Upload a JPEG, PNG, or PDF.`
+      );
+      return;
+    }
+
+    // 2. Client-side size validation (10 MB cap)
     if (file.size > MAX_FILE_SIZE_BYTES) {
       setErrorMessage(
         `File exceeds ${MAX_FILE_SIZE_LABEL} limit (${(file.size / (1024 * 1024)).toFixed(2)} MB).`
@@ -34,7 +44,7 @@ export default function UploadDropzone() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fileName: file.name,
-          fileType: file.type,
+          fileType: mimeType,
           fileSize: file.size,
         }),
       });
@@ -51,7 +61,7 @@ export default function UploadDropzone() {
       const r2Res = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
-          "Content-Type": file.type,
+          "Content-Type": mimeType,
         },
         body: file,
       });
@@ -69,7 +79,7 @@ export default function UploadDropzone() {
           storageKey,
           fileName: file.name,
           fileSize: file.size,
-          mimeType: file.type,
+          mimeType,
         }),
       });
 
@@ -137,8 +147,8 @@ export default function UploadDropzone() {
           className="text-sm md:text-base"
           style={{ color: "var(--color-on-surface-variant-color)" }}
         >
-          Upload any document or image to transcribe &mdash; PDF, Word, Markdown, plain text,
-          spreadsheets or pictures &mdash; up to {MAX_FILE_SIZE_LABEL}. Page count is unlimited.
+          Upload a single receipt or document to transcribe &mdash; JPEG, PNG, or PDF &mdash; up to{" "}
+          {MAX_FILE_SIZE_LABEL}. Only the first page of a PDF is read.
         </p>
       </div>
 
@@ -164,7 +174,7 @@ export default function UploadDropzone() {
         <input
           ref={fileInputRef}
           type="file"
-          accept="*/*"
+          accept={ALLOWED_MIME_TYPES.join(",")}
           className="hidden"
           onChange={onFileInputChange}
           disabled={isUploading}
@@ -206,7 +216,7 @@ export default function UploadDropzone() {
               className="text-base font-semibold mb-1"
               style={{ color: "var(--color-on-surface-color)" }}
             >
-              Drag and drop your document or image here
+              Drag and drop a receipt, invoice, or PDF here
             </p>
             <p
               className="text-xs mb-4"

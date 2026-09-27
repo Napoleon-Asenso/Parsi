@@ -16,3 +16,6 @@ tsconfig.tsbuildinfo
 next-env.d.ts
 
 npm-debug.log*
+npm-*.log
+build-*.log
+typecheck.log

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { MAX_FILE_SIZE_BYTES } from "@/lib/storage";
 import { useLocalDevStorage, writeLocalObject } from "@/lib/localStorage";
+import { ALLOWED_MIME_TYPES, normalizeMimeType } from "@/lib/utils";
 
 /**
  * Dev-only PUT ingest for the zero-setup local object store.
@@ -28,6 +29,19 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       { error: "storageKey is required", code: "BAD_REQUEST" },
       { status: 400 }
+    );
+  }
+
+  // Mirror the presigned-route allowlist so the dev path cannot be used to
+  // slip an unsupported type past validation.
+  const contentType = req.headers.get("content-type");
+  if (!normalizeMimeType(contentType)) {
+    return NextResponse.json(
+      {
+        error: `Unsupported file type "${contentType ?? "unknown"}". Accepted types: ${ALLOWED_MIME_TYPES.join(", ")}.`,
+        code: "UNSUPPORTED_MEDIA_TYPE",
+      },
+      { status: 415 }
     );
   }
 

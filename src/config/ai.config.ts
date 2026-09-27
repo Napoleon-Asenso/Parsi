@@ -1,34 +1,14 @@
 import { z } from "zod";
 
-// Single source of truth for BOTH AI provider endpoints. Consumers and the
-// *_CONFIG blocks below MUST derive base URLs/endpoints from here - endpoints
-// are never inlined in routes, workers, or Server Actions (AGENTS rule: no
-// inline provider parameters).
-export const AI_ENDPOINTS = {
-  // Gemini: Google's native REST endpoint (default base the @google/genai SDK
-  // uses). Parsing (Task 1) reaches this endpoint through GoogleGenAI.
-  gemini: {
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    operationEndpoint: "/generateContent",
-  },
-  // DeepSeek: OpenAI-compatible chat completions endpoint. Summarization
-  // (Task 2) reaches it through the `openai` SDK pointed at this base URL.
-  deepseek: {
-    baseUrl: "https://api.deepseek.com",
-    operationEndpoint: "/chat/completions",
-  },
-} as const;
-
 // Gemini (free tier via Google AI Studio) - handles Task 1: document parsing.
-// Gemini 2.5 Flash has vision and is available on the free tier.
+// Gemini 2.5 Flash has vision and is available on the free tier. The @google/genai
+// SDK is constructed with no baseUrl override, so it targets Google's default
+// REST endpoint; there is nothing to configure here.
 export const GEMINI_CONFIG = {
-  endpoint: AI_ENDPOINTS.gemini,
   parsing: {
     model: "gemini-2.5-flash",
     temperature: 0.2,
     maxOutputTokens: 1500,
-    timeoutMs: 30000,
-    detailLevel: "low" as const,
   },
 } as const;
 
@@ -36,7 +16,7 @@ export const GEMINI_CONFIG = {
 // DeepSeek's chat completions endpoint speaks the OpenAI wire protocol, so it
 // is called through the existing `openai` SDK pointed at DeepSeek's base URL.
 export const DEEPSEEK_CONFIG = {
-  baseUrl: AI_ENDPOINTS.deepseek.baseUrl,
+  baseUrl: "https://api.deepseek.com",
   summarization: {
     model: "deepseek-chat",
     temperature: 0.3,
@@ -51,10 +31,11 @@ export const AI_CONFIG = {
     maxRetries: 2,
   },
   documentProcessing: {
+    // PDFs are restricted to Page 1 only. Pages beyond this are never read,
+    // never rasterized, and never sent to the model.
+    maxPdfPages: 1,
     // Minimum characters of extractable text before a PDF is treated as scanned.
     minExtractedTextChars: 24,
-    // Upper bound on pages rasterized to images when a PDF has no text layer.
-    maxRasterizedPages: 15,
   },
   concurrencyLimit: 3,
 } as const;
@@ -85,9 +66,7 @@ export const ParsedDocumentSchema = ParsedReceiptSchema.extend({
   totalAmount: z.coerce.number().nonnegative().nullable().default(null),
 });
 
-export type ParsedReceipt = z.infer<typeof ParsedReceiptSchema>;
 export type ParsedDocument = z.infer<typeof ParsedDocumentSchema>;
-export type LineItem = z.infer<typeof LineItemSchema>;
 
 export const DOCUMENT_PARSING_SYSTEM_PROMPT = `You are an expert document transcription and data extraction engine. You receive an image of ANY document type: a receipt, invoice, bill, bank statement, purchase order, form, business card, handwritten note, whiteboard, screenshot, or any other photographed or scanned material.
 
