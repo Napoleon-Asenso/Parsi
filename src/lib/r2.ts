@@ -26,9 +26,7 @@ function r2Client(): S3Client {
   });
 }
 
-// Any file type is accepted; the only hard limit is the size ceiling below.
-export const MAX_FILE_SIZE_LABEL = "10 MB";
-export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+export { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "./utils";
 
 export async function generatePresignedUploadUrl(
   userId: string,

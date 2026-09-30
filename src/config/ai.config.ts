@@ -1,29 +1,37 @@
-import { z } from "zod";
+iing import { z } from "zod";
 
 // Gemini (free tier via Google AI Studio) - handles Task 1: document parsing.
-// Gemini 2.5 Flash has vision and is available on the free tier. The @google/genai
-// SDK is constructed with no baseUrl override, so it targets Google's default
-// REST endpoint; there is nothing to configure here.
+// Target model, temperature, and token budget can be changed here or via environment variables.
 export const GEMINI_CONFIG = {
   parsing: {
-    model: "gemini-2.5-flash",
-    temperature: 0.2,
-    maxOutputTokens: 1500,
+    model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
+    temperature: process.env.GEMINI_TEMPERATURE
+      ? parseFloat(process.env.GEMINI_TEMPERATURE)
+      : 0.2,
+    maxOutputTokens: process.env.GEMINI_MAX_OUTPUT_TOKENS
+      ? parseInt(process.env.GEMINI_MAX_OUTPUT_TOKENS, 10)
+      : 1500,
   },
-} as const;
+};
 
 // DeepSeek (paid API, OpenAI-compatible) - handles Task 2: summarization.
-// DeepSeek's chat completions endpoint speaks the OpenAI wire protocol, so it
-// is called through the existing `openai` SDK pointed at DeepSeek's base URL.
+// DeepSeek uses the OpenAI wire protocol, called through the official `openai` SDK
+// pointed at DeepSeek's base URL (https://api.deepseek.com).
 export const DEEPSEEK_CONFIG = {
-  baseUrl: "https://api.deepseek.com",
+  baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
   summarization: {
-    model: "deepseek-chat",
-    temperature: 0.3,
-    maxTokens: 500,
-    timeoutMs: 15000,
+    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    temperature: process.env.DEEPSEEK_TEMPERATURE
+      ? parseFloat(process.env.DEEPSEEK_TEMPERATURE)
+      : 0.3,
+    maxTokens: process.env.DEEPSEEK_MAX_TOKENS
+      ? parseInt(process.env.DEEPSEEK_MAX_TOKENS, 10)
+      : 500,
+    timeoutMs: process.env.DEEPSEEK_TIMEOUT_MS
+      ? parseInt(process.env.DEEPSEEK_TIMEOUT_MS, 10)
+      : 15000,
   },
-} as const;
+};
 
 // Shared operational settings across both providers.
 export const AI_CONFIG = {

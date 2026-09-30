@@ -6,6 +6,9 @@ import type { ParsedDocument } from "@/config/ai.config";
  */
 export const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"] as const;
 
+export const MAX_FILE_SIZE_LABEL = "10 MB";
+export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
 export type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 
 /**

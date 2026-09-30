@@ -2,8 +2,12 @@
 
 import { useState, useRef, DragEvent, ChangeEvent } from "react";
 import { useRouter } from "next/navigation";
-import { MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_LABEL } from "@/lib/storage";
-import { ALLOWED_MIME_TYPES, normalizeMimeType } from "@/lib/utils";
+import {
+  ALLOWED_MIME_TYPES,
+  normalizeMimeType,
+  MAX_FILE_SIZE_BYTES,
+  MAX_FILE_SIZE_LABEL,
+} from "@/lib/utils";
 
 export default function UploadDropzone() {
   const router = useRouter();

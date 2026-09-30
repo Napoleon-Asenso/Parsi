@@ -4,7 +4,7 @@ import {
   DEEPSEEK_CONFIG,
   FOLLOWUP_SUMMARIZATION_SYSTEM_PROMPT,
 } from "@/config/ai.config";
-import OpenAI from "openai";
+import { getDeepSeekClient } from "@/lib/deepseek";
 
 export async function POST(
   _req: NextRequest,
@@ -56,13 +56,8 @@ export async function POST(
       );
     }
 
-    // DeepSeek is OpenAI-compatible; the openai SDK is pointed at DeepSeek's
-    // base URL with a DeepSeek (paid) API key.
-    const deepseek = new OpenAI({
-      apiKey: process.env.DEEPSEEK_API_KEY,
-      baseURL: DEEPSEEK_CONFIG.baseUrl,
-      timeout: DEEPSEEK_CONFIG.summarization.timeoutMs,
-    });
+    // Instantiate OpenAI SDK configured specifically for DeepSeek endpoint
+    const deepseek = getDeepSeekClient();
 
     const completion = await deepseek.chat.completions.create({
       model: DEEPSEEK_CONFIG.summarization.model,
