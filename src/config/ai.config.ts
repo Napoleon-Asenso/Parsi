@@ -1,4 +1,4 @@
-iing import { z } from "zod";
+import { z } from "zod";
 
 // Gemini (free tier via Google AI Studio) - handles Task 1: document parsing.
 // Target model, temperature, and token budget can be changed here or via environment variables.

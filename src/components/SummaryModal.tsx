@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 interface SummaryModalProps {
   open: boolean;
   summary: string | null;
@@ -7,6 +9,7 @@ interface SummaryModalProps {
   error: string | null;
   cached: boolean;
   onClose: () => void;
+  onRetry?: () => void;
 }
 
 export default function SummaryModal({
@@ -16,89 +19,191 @@ export default function SummaryModal({
   error,
   cached,
   onClose,
+  onRetry,
 }: SummaryModalProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+      {/* Backdrop */}
       <div
-        className="absolute inset-0"
-        style={{ backgroundColor: "var(--color-inverse-surface-color)", opacity: 0.4 }}
+        className="animate-fade-in absolute inset-0 backdrop-blur-sm"
+        style={{
+          backgroundColor:
+            "color-mix(in srgb, var(--color-inverse-surface-color) 45%, transparent)",
+        }}
         onClick={onClose}
         aria-hidden="true"
       />
 
+      {/* Panel */}
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Executive document summary"
-        className="surface-card relative w-full max-w-lg p-6 md:p-8"
-        style={{ zIndex: 1 }}
+        aria-labelledby="summary-modal-title"
+        className="card animate-scale-in relative w-full max-w-xl rounded-b-none rounded-t-token-xl p-6 sm:rounded-token-xl md:p-8"
       >
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h2 className="text-lg font-bold" style={{ color: "var(--color-on-surface-color)" }}>
-              Executive Document Summary
-            </h2>
-            {cached && !loading && (
-              <span className="text-xs" style={{ color: "var(--color-on-surface-variant-color)" }}>
-                Cached result
-              </span>
-            )}
+        {/* Header */}
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="icon-tile icon-tile-primary h-10 w-10">
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v3M18.36 5.64l-2.12 2.12M21 12h-3M18.36 18.36l-2.12-2.12M12 18v3M7.76 16.24l-2.12 2.12M6 12H3M7.76 7.76 5.64 5.64" />
+              </svg>
+            </span>
+            <div>
+              <h2
+                id="summary-modal-title"
+                className="text-lg font-bold tracking-tight"
+              >
+                Executive Summary
+              </h2>
+              <p className="mt-0.5 text-xs text-on-surface-variant">
+                Two-sentence AI overview of this document
+              </p>
+              {cached && !loading && (
+                <span className="chip mt-2">
+                  <svg
+                    className="h-3 w-3"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M13 2 3 14h7l-1 8 10-12h-7z" />
+                  </svg>
+                  Cached result — no new AI call
+                </span>
+              )}
+            </div>
           </div>
+
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             aria-label="Close summary"
-            className="btn-secondary w-8 h-8 flex items-center justify-center text-base leading-none"
+            className="btn btn-secondary h-9 min-h-0 w-9 shrink-0 rounded-token-full p-0"
           >
-            &times;
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
+        {/* Loading */}
         {loading && (
-          <div className="flex flex-col items-center py-8">
-            <div
-              className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin mb-4"
-              style={{ borderColor: "var(--color-primary-color)", borderTopColor: "transparent" }}
-            />
-            <p className="text-sm" style={{ color: "var(--color-on-surface-variant-color)" }}>
-              Generating summary...
+          <div aria-live="polite" className="py-2">
+            <div className="space-y-3">
+              <div className="skeleton h-3.5 w-full" />
+              <div className="skeleton h-3.5 w-11/12" />
+              <div className="skeleton h-3.5 w-4/5" />
+            </div>
+            <p className="mt-4 text-xs text-on-surface-variant">
+              Drafting your summary…
             </p>
           </div>
         )}
 
+        {/* Error */}
         {!loading && error && (
-          <div
-            className="p-4 text-sm"
-            style={{
-              backgroundColor: "var(--status-error-surface)",
-              color: "var(--status-error-text)",
-              border: "1px solid var(--status-error-border)",
-              borderRadius: "var(--border-radius-radius-md)",
-            }}
-          >
-            {error}
+          <div className="alert alert-error" role="alert">
+            <svg
+              className="mt-0.5 h-4 w-4 shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4M12 16h.01" />
+            </svg>
+            <div className="flex-1">
+              <p className="font-semibold">Couldn&apos;t generate a summary</p>
+              <p className="mt-0.5 leading-relaxed">{error}</p>
+            </div>
           </div>
         )}
 
+        {/* Summary */}
         {!loading && !error && summary && (
-          <p
-            className="text-sm leading-relaxed whitespace-pre-wrap"
-            style={{ color: "var(--color-on-surface-color)" }}
-          >
+          <p className="whitespace-pre-wrap border-l-2 border-primary pl-4 text-sm leading-relaxed">
             {summary}
           </p>
         )}
 
+        {/* Empty */}
         {!loading && !error && !summary && (
-          <p className="text-sm" style={{ color: "var(--color-on-surface-variant-color)" }}>
-            No summary available.
+          <p className="text-sm text-on-surface-variant">
+            No summary available yet.
           </p>
         )}
 
-        <div className="mt-6 flex justify-end">
-          <button type="button" className="btn-secondary px-4 py-2 text-sm" onClick={onClose}>
+        {/* Footer */}
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-end">
+          {!loading && error && onRetry && (
+            <button type="button" className="btn btn-primary" onClick={onRetry}>
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 12a9 9 0 1 0 2.6-6.4" />
+                <path d="M3 4v5h5" />
+              </svg>
+              Try Again
+            </button>
+          )}
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
             Close
           </button>
         </div>

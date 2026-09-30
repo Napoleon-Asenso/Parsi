@@ -1,13 +1,36 @@
 "use client";
 
-import { useState, useRef, DragEvent, ChangeEvent } from "react";
+import { ChangeEvent, DragEvent, KeyboardEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ALLOWED_MIME_TYPES,
-  normalizeMimeType,
   MAX_FILE_SIZE_BYTES,
   MAX_FILE_SIZE_LABEL,
+  normalizeMimeType,
 } from "@/lib/utils";
+
+/**
+ * The four sequential stages of the direct-to-storage upload handshake.
+ * Mirrors the exact flow in `handleFile` below: presign -> PUT -> register -> navigate.
+ */
+const UPLOAD_STEPS = [
+  {
+    title: "Requesting a secure upload link",
+    detail: "Validating the file type and size with our server",
+  },
+  {
+    title: "Uploading the document",
+    detail: "Streaming bytes straight to encrypted object storage",
+  },
+  {
+    title: "Registering the processing job",
+    detail: "Handing the document to the background queue",
+  },
+  {
+    title: "Opening the processing view",
+    detail: "Setting up live status tracking",
+  },
+] as const;
 
 export default function UploadDropzone() {
   const router = useRouter();
@@ -15,11 +38,15 @@ export default function UploadDropzone() {
 
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [activeStep, setActiveStep] = useState(-1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
   const handleFile = async (file: File) => {
+    if (isUploading) return;
+
     setErrorMessage(null);
+    setNoticeMessage(null);
 
     // 1. Client-side type validation (mirrors the server-side allowlist)
     const mimeType = normalizeMimeType(file.type);
@@ -33,13 +60,13 @@ export default function UploadDropzone() {
     // 2. Client-side size validation (10 MB cap)
     if (file.size > MAX_FILE_SIZE_BYTES) {
       setErrorMessage(
-        `File exceeds ${MAX_FILE_SIZE_LABEL} limit (${(file.size / (1024 * 1024)).toFixed(2)} MB).`
+        `This file is ${(file.size / (1024 * 1024)).toFixed(2)} MB — the limit is ${MAX_FILE_SIZE_LABEL}.`
       );
       return;
     }
 
     setIsUploading(true);
-    setUploadStatus("Requesting upload signature...");
+    setActiveStep(0);
 
     try {
       // Step 1: POST /api/upload/presigned-url
@@ -60,8 +87,8 @@ export default function UploadDropzone() {
 
       const { uploadUrl, storageKey } = await presignedRes.json();
 
-      // Step 2: Direct Binary PUT to Cloudflare R2
-      setUploadStatus("Uploading document directly to storage...");
+      // Step 2: Direct binary PUT to Cloudflare R2
+      setActiveStep(1);
       const r2Res = await fetch(uploadUrl, {
         method: "PUT",
         headers: {
@@ -71,11 +98,11 @@ export default function UploadDropzone() {
       });
 
       if (!r2Res.ok) {
-        throw new Error(`R2 direct upload failed with status ${r2Res.status}`);
+        throw new Error(`Storage upload failed with status ${r2Res.status}`);
       }
 
       // Step 3: POST /api/jobs with metadata
-      setUploadStatus("Registering processing job...");
+      setActiveStep(2);
       const jobRes = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,27 +122,34 @@ export default function UploadDropzone() {
       const { jobId } = await jobRes.json();
 
       // Step 4: Immediate redirection to Screen 2
-      setUploadStatus("Redirecting to processing view...");
+      setActiveStep(3);
       router.push(`/jobs/${jobId}`);
     } catch (err) {
       console.error("Upload workflow error:", err);
       setErrorMessage(
-        err instanceof Error ? err.message : "An unexpected error occurred during upload."
+        err instanceof Error
+          ? err.message
+          : "An unexpected error occurred during upload."
       );
       setIsUploading(false);
-      setUploadStatus("");
+      setActiveStep(-1);
     }
+  };
+
+  const openFilePicker = () => {
+    if (!isUploading) fileInputRef.current?.click();
   };
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    if (!isUploading) setIsDragging(true);
   };
 
   const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     setIsDragging(false);
   };
 
@@ -124,141 +158,346 @@ export default function UploadDropzone() {
     e.stopPropagation();
     setIsDragging(false);
 
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // Single-file processing only
-      const file = e.dataTransfer.files[0];
-      handleFile(file);
+    if (isUploading) return;
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    // Single-file processing only — first file wins, and we say so.
+    if (files.length > 1) {
+      setNoticeMessage(
+        "Only the first file was used — this pipeline processes one document at a time."
+      );
     }
+    handleFile(files[0]);
   };
 
   const onFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
+      // Allow re-selecting the same file after a failure.
+      e.target.value = "";
       handleFile(file);
     }
   };
 
+  const onDropzoneKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openFilePicker();
+    }
+  };
+
+  const progressPercent = isUploading
+    ? Math.round(((activeStep + 1) / UPLOAD_STEPS.length) * 100)
+    : 0;
+
   return (
-    <div className="surface-card p-8 md:p-12 w-full text-center">
-      <div className="mb-6">
-        <h1
-          className="text-2xl md:text-3xl font-bold mb-2 tracking-tight"
-          style={{ color: "var(--color-on-surface-color)" }}
-        >
-          Document &amp; Receipt Parser
-        </h1>
-        <p
-          className="text-sm md:text-base"
-          style={{ color: "var(--color-on-surface-variant-color)" }}
-        >
-          Upload a single receipt or document to transcribe &mdash; JPEG, PNG, or PDF &mdash; up to{" "}
-          {MAX_FILE_SIZE_LABEL}. Only the first page of a PDF is read.
-        </p>
-      </div>
-
-      <div
-        id="dropzone"
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onClick={() => !isUploading && fileInputRef.current?.click()}
-        style={{
-          borderColor: isDragging
-            ? "var(--color-primary-color)"
-            : "var(--color-outline-variant-color)",
-          backgroundColor: isDragging
-            ? "var(--color-surface-container-high-color)"
-            : "var(--color-surface-container-low-color)",
-          borderRadius: "var(--border-radius-radius-md)",
-          transition: "all 0.2s ease",
-          cursor: isUploading ? "not-allowed" : "pointer",
-        }}
-        className="border-2 border-dashed p-10 md:p-16 flex flex-col items-center justify-center min-h-[260px]"
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ALLOWED_MIME_TYPES.join(",")}
-          className="hidden"
-          onChange={onFileInputChange}
-          disabled={isUploading}
-        />
-
-        {isUploading ? (
-          <div className="flex flex-col items-center">
-            <div
-              className="w-10 h-10 border-4 border-t-transparent rounded-full animate-spin mb-4"
-              style={{
-                borderColor: "var(--color-primary-color)",
-                borderTopColor: "transparent",
-              }}
-            />
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--color-primary-color)" }}
-            >
-              {uploadStatus}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
+    <section className="animate-fade-up w-full">
+      <div className="card p-6 sm:p-10">
+        {/* ---------------- Header ---------------- */}
+        <div className="mb-8 text-center">
+          <span className="chip">
             <svg
-              className="w-14 h-14 mb-4"
+              className="h-3.5 w-3.5 text-primary"
+              viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              viewBox="0 0 24 24"
-              style={{ color: "var(--color-primary-color)" }}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              <path
+              <path d="M12 3v3M18.36 5.64l-2.12 2.12M21 12h-3M18.36 18.36l-2.12-2.12M12 18v3M7.76 16.24l-2.12 2.12M6 12H3M7.76 7.76 5.64 5.64" />
+            </svg>
+            AI document parsing
+          </span>
+
+          <h1 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
+            Receipts in. Structured data out.
+          </h1>
+          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-on-surface-variant">
+            Drop a single receipt, invoice, or PDF. We transcribe it, extract the
+            fields, and validate everything against a strict schema.
+          </p>
+        </div>
+
+        {/* ---------------- Dropzone / Progress ---------------- */}
+        {isUploading ? (
+          <div
+            className="card-inset animate-fade-in p-6 md:p-8"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm font-semibold">
+                    {UPLOAD_STEPS[activeStep]?.title ?? "Working…"}
+                  </p>
+                  <p className="text-xs text-on-surface-variant">
+                    {UPLOAD_STEPS[activeStep]?.detail ?? ""}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-semibold tabular-nums text-on-surface-variant">
+                {progressPercent}%
+              </span>
+            </div>
+
+            <div className="progress-track mt-5">
+              <div
+                className="progress-fill"
+                style={{ width: `${progressPercent}%` }}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent}
+                aria-label="Upload progress"
+              />
+            </div>
+
+            <ol className="mt-6 grid gap-2.5">
+              {UPLOAD_STEPS.map((step, index) => {
+                const state =
+                  index < activeStep
+                    ? "done"
+                    : index === activeStep
+                      ? "active"
+                      : "todo";
+                return (
+                  <li
+                    key={step.title}
+                    className="flex items-center gap-3 text-xs"
+                  >
+                    {state === "done" ? (
+                      <span
+                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-token-full bg-primary text-on-primary"
+                        aria-hidden="true"
+                      >
+                        <svg
+                          className="h-3 w-3"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="m5 13 4 4L19 7" />
+                        </svg>
+                      </span>
+                    ) : state === "active" ? (
+                      <span
+                        className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <span
+                        className="h-5 w-5 shrink-0 rounded-token-full border-2 border-outline-variant"
+                        aria-hidden="true"
+                      />
+                    )}
+                    <span
+                      className={
+                        state === "todo"
+                          ? "text-on-surface-variant"
+                          : "font-medium text-on-surface"
+                      }
+                    >
+                      {step.title}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : (
+          <div
+            id="dropzone"
+            role="button"
+            tabIndex={0}
+            aria-label="Upload a document. Press Enter to browse files, or drag and drop a file here."
+            aria-disabled={isUploading}
+            onClick={openFilePicker}
+            onKeyDown={onDropzoneKeyDown}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className="group relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center rounded-token-lg border-2 border-dashed p-8 text-center transition-all duration-200 md:p-12"
+            style={{
+              borderColor: isDragging
+                ? "var(--color-primary-color)"
+                : "var(--color-outline-variant-color)",
+              backgroundColor: isDragging
+                ? "var(--color-surface-container-low-color)"
+                : "var(--color-surface-container-lowest-color)",
+              transform: isDragging ? "scale(1.01)" : undefined,
+            }}
+          >
+            {isDragging && (
+              <span
+                className="pointer-events-none absolute inset-0 rounded-token-lg bg-primary"
+                style={{ opacity: 0.04 }}
+                aria-hidden="true"
+              />
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ALLOWED_MIME_TYPES.join(",")}
+              className="sr-only"
+              onChange={onFileInputChange}
+              disabled={isUploading}
+              tabIndex={-1}
+              aria-hidden="true"
+            />
+
+            {/* Icon */}
+            <span
+              className="icon-tile icon-tile-primary h-16 w-16 rounded-token-lg transition-transform duration-200 group-hover:scale-105"
+              aria-hidden="true"
+            >
+              <svg
+                className="h-7 w-7"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.6}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
+              >
+                <path d="M12 16V4m0 0 4 4m-4-4-4 4" />
+                <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+              </svg>
+            </span>
+
+            <p className="mt-5 text-base font-semibold">
+              {isDragging
+                ? "Release to upload"
+                : "Drag & drop your document here"}
+            </p>
+            <p className="mt-1 text-xs text-on-surface-variant">
+              or{" "}
+              <span className="font-semibold text-primary underline-offset-4 group-hover:underline">
+                browse your files
+              </span>
+            </p>
+
+            {/* Format chips */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+              {["JPEG", "PNG", "PDF"].map((format) => (
+                <span key={format} className="chip">
+                  {format}
+                </span>
+              ))}
+              <span className="chip">Up to {MAX_FILE_SIZE_LABEL}</span>
+              <span className="chip">PDF · first page only</span>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- Feedback ---------------- */}
+        {noticeMessage && !isUploading && (
+          <div className="alert alert-info mt-4 animate-fade-in" role="status">
+            <svg
+              className="mt-0.5 h-4 w-4 shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 16v-4M12 8h.01" />
             </svg>
-            <p
-              className="text-base font-semibold mb-1"
-              style={{ color: "var(--color-on-surface-color)" }}
+            <p className="leading-relaxed">{noticeMessage}</p>
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="alert alert-error mt-4 animate-fade-in" role="alert">
+            <svg
+              className="mt-0.5 h-4 w-4 shrink-0"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              Drag and drop a receipt, invoice, or PDF here
-            </p>
-            <p
-              className="text-xs mb-4"
-              style={{ color: "var(--color-on-surface-variant-color)" }}
-            >
-              or click to browse from your computer
-            </p>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4M12 16h.01" />
+            </svg>
+            <div className="flex-1">
+              <p className="font-semibold">Upload failed</p>
+              <p className="mt-0.5 leading-relaxed">{errorMessage}</p>
+            </div>
             <button
               type="button"
-              className="btn-secondary px-4 py-2 text-xs"
-              tabIndex={-1}
+              onClick={() => setErrorMessage(null)}
+              className="shrink-0 rounded-token-sm px-2 py-1 text-xs font-semibold underline underline-offset-2 transition-opacity hover:opacity-75"
             >
-              Select Single Document
+              Dismiss
             </button>
           </div>
         )}
       </div>
 
-      {errorMessage && (
-        <div
-          className="mt-4 p-3 text-xs text-left"
-          style={{
-            backgroundColor: "var(--status-error-surface)",
-            color: "var(--status-error-text)",
-            border: "1px solid var(--status-error-border)",
-            borderRadius: "var(--border-radius-radius-md)",
-          }}
-        >
-          <strong>Upload Error: </strong>
-          {errorMessage}
-        </div>
-      )}
-
-      <div className="mt-6 flex items-center justify-between text-xs" style={{ color: "var(--color-on-surface-variant-color)" }}>
-        <span>Direct Cloudflare R2 Presigned Upload</span>
-        <span>Strict Zod Validation</span>
-        <span>Concurrently Throttled Worker</span>
+      {/* ---------------- Trust footer ---------------- */}
+      <div className="mt-5 grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
+        {[
+          {
+            icon: (
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            ),
+            label: "Direct presigned upload",
+          },
+          {
+            icon: (
+              <>
+                <path d="m9 12 2 2 4-4" />
+                <circle cx="12" cy="12" r="10" />
+              </>
+            ),
+            label: "Zod-validated results",
+          },
+          {
+            icon: (
+              <>
+                <path d="M13 2 3 14h7l-1 8 10-12h-7z" />
+              </>
+            ),
+            label: "Throttled AI workers",
+          },
+        ].map((item) => (
+          <span
+            key={item.label}
+            className="inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-on-surface-variant"
+          >
+            <svg
+              className="h-3.5 w-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              {item.icon}
+            </svg>
+            {item.label}
+          </span>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
