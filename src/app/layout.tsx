@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -21,7 +22,11 @@ export default function RootLayout({
 
         <header className="w-full">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-5 md:px-8 md:py-6">
-            <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="flex items-center gap-3 transition-opacity hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-token-sm"
+              aria-label="Parsi homepage"
+            >
               <span className="logo-mark" aria-hidden="true">
                 <svg
                   className="h-5 w-5"
@@ -45,24 +50,7 @@ export default function RootLayout({
                   Document Parsing Pipeline
                 </span>
               </span>
-            </div>
-
-            <span className="hidden items-center gap-1.5 text-[11px] font-medium text-on-surface-variant sm:inline-flex">
-              <svg
-                className="h-3.5 w-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.8}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <path d="m9 12 2 2 4-4" />
-              </svg>
-              Direct-to-storage upload
-            </span>
+            </Link>
           </div>
         </header>
 

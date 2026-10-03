@@ -197,23 +197,7 @@ export default function UploadDropzone() {
       <div className="card p-6 sm:p-10">
         {/* ---------------- Header ---------------- */}
         <div className="mb-8 text-center">
-          <span className="chip">
-            <svg
-              className="h-3.5 w-3.5 text-primary"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 3v3M18.36 5.64l-2.12 2.12M21 12h-3M18.36 18.36l-2.12-2.12M12 18v3M7.76 16.24l-2.12 2.12M6 12H3M7.76 7.76 5.64 5.64" />
-            </svg>
-            AI document parsing
-          </span>
-
-          <h1 className="mt-4 text-2xl font-bold tracking-tight sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Receipts in. Structured data out.
           </h1>
           <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-on-surface-variant">
@@ -449,54 +433,6 @@ export default function UploadDropzone() {
             </button>
           </div>
         )}
-      </div>
-
-      {/* ---------------- Trust footer ---------------- */}
-      <div className="mt-5 grid grid-cols-1 gap-2 text-center sm:grid-cols-3">
-        {[
-          {
-            icon: (
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            ),
-            label: "Direct presigned upload",
-          },
-          {
-            icon: (
-              <>
-                <path d="m9 12 2 2 4-4" />
-                <circle cx="12" cy="12" r="10" />
-              </>
-            ),
-            label: "Zod-validated results",
-          },
-          {
-            icon: (
-              <>
-                <path d="M13 2 3 14h7l-1 8 10-12h-7z" />
-              </>
-            ),
-            label: "Throttled AI workers",
-          },
-        ].map((item) => (
-          <span
-            key={item.label}
-            className="inline-flex items-center justify-center gap-1.5 text-[11px] font-medium text-on-surface-variant"
-          >
-            <svg
-              className="h-3.5 w-3.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.8}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              {item.icon}
-            </svg>
-            {item.label}
-          </span>
-        ))}
       </div>
     </section>
   );

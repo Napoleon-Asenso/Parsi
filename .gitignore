@@ -15,6 +15,11 @@ tsconfig.tsbuildinfo
 
 next-env.d.ts
 
+# Local PostgreSQL binaries & data
+pgsql/
+.pgdata/
+*.zip
+
 npm-debug.log*
 npm-*.log
 build-*.log

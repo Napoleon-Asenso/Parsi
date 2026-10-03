@@ -80,17 +80,6 @@
 
   .bg-app {
     background-color: var(--color-background-color);
-    background-image: radial-gradient(
-        52rem 34rem at 12% -8%,
-        color-mix(in srgb, var(--color-primary-container-color) 42%, transparent),
-        transparent 62%
-      ),
-      radial-gradient(
-        46rem 30rem at 108% 8%,
-        color-mix(in srgb, var(--color-secondary-container-color) 30%, transparent),
-        transparent 60%
-      );
-    background-attachment: fixed;
   }
 
   /* ---- App chrome --------------------------------------------------- */
@@ -250,14 +239,8 @@
 
   .skeleton {
     border-radius: var(--border-radius-radius-sm);
-    background: linear-gradient(
-      90deg,
-      var(--color-surface-container-high-color) 25%,
-      var(--color-surface-container-highest-color) 50%,
-      var(--color-surface-container-high-color) 75%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.6s linear infinite;
+    background-color: var(--color-surface-container-high-color);
+    animation: pulse 1.6s ease-in-out infinite;
   }
 
   .progress-track {
