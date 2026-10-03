@@ -223,13 +223,12 @@ export default function UploadDropzone() {
     <section className="animate-fade-up w-full">
       <div className="card p-6 sm:p-10">
         {/* ---------------- Header ---------------- */}
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Receipts in. Structured data out.
+        <div className="mb-6">
+          <h1 className="text-xl font-bold tracking-tight text-on-surface sm:text-2xl">
+            Upload document
           </h1>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-on-surface-variant">
-            Drop a single receipt, invoice, or PDF. We transcribe it, extract the
-            fields, and validate everything against a strict schema.
+          <p className="mt-1 text-xs text-on-surface-variant">
+            Process receipts, invoices, and documents with AI.
           </p>
         </div>
 
@@ -348,7 +347,7 @@ export default function UploadDropzone() {
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onDrop={onDrop}
-            className="group relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center rounded-token-lg border-2 border-dashed p-8 text-center transition-all duration-200 md:p-12"
+            className="group relative flex min-h-[290px] cursor-pointer flex-col items-center justify-center rounded-token-lg border-2 border-dashed p-8 text-center transition-all duration-200 hover:border-primary md:p-10"
             style={{
               borderColor: isDragging
                 ? "var(--color-primary-color)"
@@ -378,9 +377,9 @@ export default function UploadDropzone() {
               aria-hidden="true"
             />
 
-            {/* Icon */}
-            <span
-              className="icon-tile icon-tile-primary h-16 w-16 rounded-token-lg transition-transform duration-200 group-hover:scale-105"
+            {/* Cloud upload icon */}
+            <div
+              className="mb-4 flex h-14 w-14 items-center justify-center rounded-token-lg bg-container-high text-primary transition-transform duration-200 group-hover:scale-105"
               aria-hidden="true"
             >
               <svg
@@ -388,37 +387,47 @@ export default function UploadDropzone() {
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth={1.6}
+                strokeWidth={1.8}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="M12 16V4m0 0 4 4m-4-4-4 4" />
-                <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+                <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+                <path d="M12 12v9" />
+                <path d="m16 16-4-4-4 4" />
               </svg>
-            </span>
+            </div>
 
-            <p className="mt-5 text-base font-semibold">
-              {isDragging
-                ? "Release to upload"
-                : "Drag & drop your document here"}
-            </p>
-            <p className="mt-1 text-xs text-on-surface-variant">
-              or{" "}
-              <span className="font-semibold text-primary underline-offset-4 group-hover:underline">
-                browse your files
-              </span>
+            <h2 className="text-base font-semibold text-on-surface">
+              {isDragging ? "Release to upload" : "Upload Your Document"}
+            </h2>
+
+            <p className="mt-2 max-w-[320px] text-xs leading-relaxed text-on-surface-variant">
+              Drag and drop receipts, invoices, or documents here, or click to browse.
             </p>
 
-            {/* Format chips */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-              {["JPEG", "PNG", "PDF"].map((format) => (
-                <span key={format} className="chip">
-                  {format}
+            {/* Format pills */}
+            <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+              {["PDF", "JPG", "PNG"].map((type) => (
+                <span
+                  key={type}
+                  className="rounded-token-sm bg-container-high px-2.5 py-1 text-[10px] font-semibold text-primary"
+                >
+                  {type}
                 </span>
               ))}
-              <span className="chip">Up to {MAX_FILE_SIZE_LABEL}</span>
-              <span className="chip">PDF · first page only</span>
             </div>
+
+            <button
+              type="button"
+              className="btn btn-primary mt-5 px-7 py-2.5 text-xs font-semibold"
+              tabIndex={-1}
+            >
+              Choose File
+            </button>
+
+            <p className="mt-3 text-[10px] text-on-surface-variant">
+              Single-file processing • Max {MAX_FILE_SIZE_LABEL}
+            </p>
           </div>
         )}
 

@@ -417,68 +417,103 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
             </div>
           </div>
 
-          {/* Stage tracker */}
-          <ol className="mt-6 grid gap-2.5">
-            {STAGES.map((stage, index) => {
-              const state =
-                index < stageIndex ? "done" : index === stageIndex ? "active" : "todo";
-              return (
-                <li
-                  key={stage.label}
-                  className="flex items-start gap-3 rounded-token-md border border-outline-variant bg-container-low px-4 py-3"
-                  style={
-                    state === "active"
-                      ? { borderColor: "var(--status-info-border)" }
-                      : undefined
-                  }
-                >
-                  {state === "done" ? (
-                    <span
-                      className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-token-full bg-primary text-on-primary"
-                      aria-hidden="true"
-                    >
-                      <svg
-                        className="h-3 w-3"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={3}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
+          {/* Stage tracker (Timeline) */}
+          <div className="card-inset mt-6 p-5">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+              Processing Progress
+            </h3>
+            <ol className="space-y-1">
+              {STAGES.map((stage, index) => {
+                const state =
+                  index < stageIndex ? "done" : index === stageIndex ? "active" : "todo";
+                const isLast = index === STAGES.length - 1;
+
+                return (
+                  <li key={stage.label} className="relative flex items-start gap-4">
+                    {/* Vertical connecting line */}
+                    {!isLast && (
+                      <div
+                        className="absolute left-[9px] top-5 h-[calc(100%+4px)] w-0.5"
+                        style={{
+                          backgroundColor:
+                            state === "done"
+                              ? "var(--color-primary-color)"
+                              : "var(--color-outline-variant-color)",
+                        }}
+                        aria-hidden="true"
+                      />
+                    )}
+
+                    {/* Step Icon */}
+                    <div className="relative z-10 mt-0.5 shrink-0">
+                      {state === "done" ? (
+                        <div className="flex h-5 w-5 items-center justify-center rounded-token-full bg-primary text-on-primary">
+                          <svg
+                            className="h-3 w-3"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                          >
+                            <path d="m5 13 4 4L19 7" />
+                          </svg>
+                        </div>
+                      ) : state === "active" ? (
+                        <div className="flex h-5 w-5 items-center justify-center rounded-token-full border-2 border-primary bg-container-lowest">
+                          <div className="h-2 w-2 rounded-token-full bg-primary animate-pulse" />
+                        </div>
+                      ) : (
+                        <div className="h-5 w-5 rounded-token-full border-2 border-outline-variant bg-container-lowest" />
+                      )}
+                    </div>
+
+                    {/* Step Labels */}
+                    <div className="min-w-0 flex-1 pb-5">
+                      <p
+                        className={`text-xs font-semibold ${
+                          state === "todo"
+                            ? "text-on-surface-variant"
+                            : "text-on-surface"
+                        }`}
                       >
-                        <path d="m5 13 4 4L19 7" />
-                      </svg>
-                    </span>
-                  ) : state === "active" ? (
-                    <span
-                      className="mt-0.5 h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-info-text border-t-transparent"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <span
-                      className="mt-0.5 h-5 w-5 shrink-0 rounded-token-full border-2 border-outline-variant"
-                      aria-hidden="true"
-                    />
-                  )}
-                  <div>
-                    <p
-                      className={
-                        state === "todo"
-                          ? "text-xs font-medium text-on-surface-variant"
-                          : "text-xs font-semibold"
-                      }
-                    >
-                      {stage.label}
-                      {state === "active" ? " — in progress" : ""}
-                    </p>
-                    <p className="text-[11px] text-on-surface-variant">
-                      {stage.detail}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+                        {stage.label}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-on-surface-variant">
+                        {stage.detail}
+                      </p>
+                    </div>
+
+                    {/* Right status icon */}
+                    <div className="shrink-0 pt-0.5">
+                      {state === "done" ? (
+                        <svg
+                          className="h-4 w-4 text-primary"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                      ) : state === "active" ? (
+                        <span
+                          className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-outline-variant border-t-primary"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
 
           {/* Job meta */}
           <dl className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
