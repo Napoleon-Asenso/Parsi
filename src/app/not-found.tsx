@@ -9,10 +9,7 @@ export default function NotFound() {
       <p className="mt-2 text-sm text-on-surface-variant">
         The requested document or page could not be located.
       </p>
-      <Link
-        href="/"
-        className="btn-primary mt-6 px-6 py-2.5 text-xs font-semibold"
-      >
+      <Link href="/" className="btn btn-primary mt-6">
         Return to Upload
       </Link>
     </section>

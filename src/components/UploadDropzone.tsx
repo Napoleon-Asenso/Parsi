@@ -35,12 +35,23 @@ const UPLOAD_STEPS = [
 export default function UploadDropzone() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [activeStep, setActiveStep] = useState(-1);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+
+  const cancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsUploading(false);
+    setActiveStep(-1);
+    setNoticeMessage("Upload was cancelled.");
+  };
 
   const handleFile = async (file: File) => {
     if (isUploading) return;
@@ -65,6 +76,10 @@ export default function UploadDropzone() {
       return;
     }
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const signal = controller.signal;
+
     setIsUploading(true);
     setActiveStep(0);
 
@@ -73,6 +88,7 @@ export default function UploadDropzone() {
       const presignedRes = await fetch("/api/upload/presigned-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
           fileName: file.name,
           fileType: mimeType,
@@ -94,6 +110,7 @@ export default function UploadDropzone() {
         headers: {
           "Content-Type": mimeType,
         },
+        signal,
         body: file,
       });
 
@@ -106,6 +123,7 @@ export default function UploadDropzone() {
       const jobRes = await fetch("/api/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
           storageKey,
           fileName: file.name,
@@ -125,6 +143,13 @@ export default function UploadDropzone() {
       setActiveStep(3);
       router.push(`/jobs/${jobId}`);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        // User aborted upload
+        setIsUploading(false);
+        setActiveStep(-1);
+        setNoticeMessage("Upload was cancelled.");
+        return;
+      }
       console.error("Upload workflow error:", err);
       setErrorMessage(
         err instanceof Error
@@ -133,6 +158,8 @@ export default function UploadDropzone() {
       );
       setIsUploading(false);
       setActiveStep(-1);
+    } finally {
+      abortControllerRef.current = null;
     }
   };
 
@@ -212,7 +239,7 @@ export default function UploadDropzone() {
             className="card-inset animate-fade-in p-6 md:p-8"
             aria-live="polite"
           >
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <span
                   className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent"
@@ -227,9 +254,19 @@ export default function UploadDropzone() {
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-semibold tabular-nums text-on-surface-variant">
-                {progressPercent}%
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold tabular-nums text-on-surface-variant">
+                  {progressPercent}%
+                </span>
+                <button
+                  type="button"
+                  onClick={cancelUpload}
+                  className="btn btn-secondary px-3 py-1 text-xs"
+                  aria-label="Cancel upload"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
 
             <div className="progress-track mt-5">

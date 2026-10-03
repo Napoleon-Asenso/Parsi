@@ -57,3 +57,67 @@ export async function GET(
     );
   }
 }
+
+export async function PATCH(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json(
+        {
+          error: "Job ID parameter is required",
+          code: "MISSING_JOB_ID",
+        },
+        { status: 400 }
+      );
+    }
+
+    const job = await db.job.findUnique({
+      where: { id },
+    });
+
+    if (!job) {
+      return NextResponse.json(
+        {
+          error: `Job with ID '${id}' not found`,
+          code: "NOT_FOUND",
+        },
+        { status: 404 }
+      );
+    }
+
+    // Only allow stopping if job is in PENDING or PROCESSING status
+    if (job.status === "PENDING" || job.status === "PROCESSING") {
+      const updated = await db.job.update({
+        where: { id },
+        data: {
+          status: "FAILED",
+          errorMessage: "Processing stopped by user.",
+        },
+      });
+      return NextResponse.json(updated, { status: 200 });
+    }
+
+    return NextResponse.json(job, { status: 200 });
+  } catch (err) {
+    console.error("Error stopping job:", err);
+    return NextResponse.json(
+      {
+        error: "Failed to stop processing job",
+        code: "INTERNAL_SERVER_ERROR",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return PATCH(req, context);
+}
+

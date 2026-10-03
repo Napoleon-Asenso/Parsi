@@ -71,6 +71,15 @@ export const parseReceiptFunction = inngest.createFunction(
 
       // Step 4: Invoke Google Gemini (free tier) Chat + Vision API
       const rawAiOutput = await step.run("call-gemini-vision", async () => {
+        // If user stopped the job, abort early
+        const checkStatus = await db.job.findUnique({
+          where: { id: jobId },
+          select: { status: true },
+        });
+        if (checkStatus?.status === "FAILED") {
+          throw new NonRetriableError("Processing was stopped by user");
+        }
+
         if (forceFailure) {
           // If forced failure test flag is on, return invalid JSON payload immediately
           return JSON.stringify({
@@ -128,6 +137,15 @@ export const parseReceiptFunction = inngest.createFunction(
 
       // Step 5: Validate Zod schema & update PostgreSQL database
       await step.run("validate-and-save", async () => {
+        // If user stopped the job, do not overwrite status
+        const checkStatus = await db.job.findUnique({
+          where: { id: jobId },
+          select: { status: true },
+        });
+        if (checkStatus?.status === "FAILED") {
+          return;
+        }
+
         let parsedJson: unknown;
         try {
           // Strip Markdown code block wrappers
@@ -174,13 +192,19 @@ export const parseReceiptFunction = inngest.createFunction(
       // Ensure failure status and error details are recorded on unrecoverable failure
       const errorText = err instanceof Error ? err.message : String(err);
       try {
-        await db.job.update({
+        const existing = await db.job.findUnique({
           where: { id: jobId },
-          data: {
-            status: "FAILED",
-            errorMessage: errorText,
-          },
+          select: { status: true, errorMessage: true },
         });
+        if (existing?.status !== "FAILED") {
+          await db.job.update({
+            where: { id: jobId },
+            data: {
+              status: "FAILED",
+              errorMessage: errorText,
+            },
+          });
+        }
       } catch (dbErr) {
         console.error("Failed to update job status to FAILED:", dbErr);
       }

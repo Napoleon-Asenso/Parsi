@@ -51,10 +51,40 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isStopping, setIsStopping] = useState(false);
 
   const isTerminalRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const clearTimersRef = useRef<() => void>(() => {});
   onCompleteRef.current = onComplete;
+
+  const handleStopProcessing = async () => {
+    if (isStopping || isTerminalRef.current) return;
+    setIsStopping(true);
+    isTerminalRef.current = true;
+    clearTimersRef.current();
+
+    try {
+      const res = await fetch(`/api/jobs/${jobId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        const data: JobRecord = await res.json();
+        setJob(data);
+        setStatus(data.status);
+        setErrorMessage(data.errorMessage || "Processing stopped by user.");
+      } else {
+        setStatus("FAILED");
+        setErrorMessage("Processing stopped by user.");
+      }
+    } catch {
+      setStatus("FAILED");
+      setErrorMessage("Processing stopped by user.");
+    } finally {
+      setIsStopping(false);
+    }
+  };
 
   useEffect(() => {
     isTerminalRef.current = false;
@@ -70,6 +100,7 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
       pollTimer.current = null;
       clockTimer.current = null;
     };
+    clearTimersRef.current = clearTimers;
 
     const poll = async () => {
       if (isTerminalRef.current) return;
@@ -225,7 +256,9 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
                 </svg>
               </span>
               <h1 className="text-lg font-bold tracking-tight md:text-xl">
-                We couldn&apos;t parse this document
+                {errorMessage === "Processing stopped by user."
+                  ? "Processing stopped"
+                  : "We couldn't parse this document"}
               </h1>
             </div>
             {renderBadge()}
@@ -301,9 +334,20 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
               {jobId.slice(0, 8)}…
             </span>
           </div>
-          <span className="text-xs font-medium tabular-nums text-on-surface-variant">
-            {Math.min(elapsedSeconds, TIMEOUT_SECONDS)}s of {TIMEOUT_SECONDS}s
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium tabular-nums text-on-surface-variant">
+              {Math.min(elapsedSeconds, TIMEOUT_SECONDS)}s of {TIMEOUT_SECONDS}s
+            </span>
+            <button
+              type="button"
+              onClick={handleStopProcessing}
+              disabled={isStopping}
+              className="btn btn-secondary px-3 py-1 text-xs"
+              aria-label="Stop processing"
+            >
+              {isStopping ? "Stopping…" : "Stop Processing"}
+            </button>
+          </div>
         </div>
 
         <div className="px-6 pb-6 md:px-8 md:pb-8">
@@ -463,6 +507,32 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
               </>
             )}
           </dl>
+
+          {/* Stop processing action */}
+          <div className="mt-8 flex justify-center">
+            <button
+              type="button"
+              onClick={handleStopProcessing}
+              disabled={isStopping}
+              className="btn btn-secondary text-xs"
+              aria-label="Stop processing"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <rect x="9" y="9" width="6" height="6" />
+              </svg>
+              {isStopping ? "Stopping processing…" : "Stop Processing"}
+            </button>
+          </div>
         </div>
       </div>
     </section>
