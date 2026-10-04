@@ -139,6 +139,17 @@
     background-color: var(--color-surface-container-low-color);
   }
 
+  .btn-danger {
+    background-color: var(--status-error-surface);
+    color: var(--status-error-text);
+    border: 1px solid var(--status-error-border);
+    box-shadow: var(--shadows-shadow-xs);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background-color: var(--status-error-border);
+    color: var(--color-on-primary-color);
+  }
+
   /* ---- Chips & badges ----------------------------------------------- */
 
   .chip {

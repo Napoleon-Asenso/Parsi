@@ -223,7 +223,7 @@ export default function UploadDropzone() {
     <section className="animate-fade-up w-full">
       <div className="card p-6 sm:p-10">
         {/* ---------------- Header ---------------- */}
-        <div className="mb-6">
+        <div className="mb-6 text-center">
           <h1 className="text-xl font-bold tracking-tight text-on-surface sm:text-2xl">
             Upload document
           </h1>
@@ -257,14 +257,6 @@ export default function UploadDropzone() {
                 <span className="text-xs font-semibold tabular-nums text-on-surface-variant">
                   {progressPercent}%
                 </span>
-                <button
-                  type="button"
-                  onClick={cancelUpload}
-                  className="btn btn-secondary px-3 py-1 text-xs"
-                  aria-label="Cancel upload"
-                >
-                  Cancel
-                </button>
               </div>
             </div>
 
@@ -334,6 +326,18 @@ export default function UploadDropzone() {
                 );
               })}
             </ol>
+
+            {/* Cancel upload action */}
+            <div className="mt-8 flex justify-end">
+              <button
+                type="button"
+                onClick={cancelUpload}
+                className="btn btn-danger text-xs"
+                aria-label="Cancel upload"
+              >
+                Cancel Upload
+              </button>
+            </div>
           </div>
         ) : (
           <div

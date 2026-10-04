@@ -338,15 +338,6 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
             <span className="text-xs font-medium tabular-nums text-on-surface-variant">
               {Math.min(elapsedSeconds, TIMEOUT_SECONDS)}s of {TIMEOUT_SECONDS}s
             </span>
-            <button
-              type="button"
-              onClick={handleStopProcessing}
-              disabled={isStopping}
-              className="btn btn-secondary px-3 py-1 text-xs"
-              aria-label="Stop processing"
-            >
-              {isStopping ? "Stopping…" : "Stop Processing"}
-            </button>
           </div>
         </div>
 
@@ -544,27 +535,14 @@ export default function ProcessingView({ jobId, onComplete }: ProcessingViewProp
           </dl>
 
           {/* Stop processing action */}
-          <div className="mt-8 flex justify-center">
+          <div className="mt-8 flex justify-end">
             <button
               type="button"
               onClick={handleStopProcessing}
               disabled={isStopping}
-              className="btn btn-secondary text-xs"
+              className="btn btn-danger text-xs"
               aria-label="Stop processing"
             >
-              <svg
-                className="h-3.5 w-3.5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <rect x="9" y="9" width="6" height="6" />
-              </svg>
               {isStopping ? "Stopping processing…" : "Stop Processing"}
             </button>
           </div>
